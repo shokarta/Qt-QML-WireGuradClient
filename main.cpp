@@ -3,6 +3,8 @@
 #include <QQmlContext>
 
 #include "ServiceController.h"
+#include "VpnProfilesModel.h"
+
 
 int main(int argc,char *argv[])
 {
@@ -10,7 +12,7 @@ int main(int argc,char *argv[])
 
     QQmlApplicationEngine engine;
 
-	auto controller = new ServiceController(&app);			engine.rootContext()->setContextProperty("vpn", controller);
+	auto serviceController = new ServiceController(&app);			engine.rootContext()->setContextProperty("serviceController", serviceController);
 
 	const QUrl url("qrc:/wireGuardClient/Main.qml");
 	QObject::connect(

@@ -30,7 +30,7 @@ find_package(Qt6 REQUIRED COMPONENTS QuickControls2)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Gui)
 find_package(Qt6 REQUIRED COMPONENTS Network)
-find_package(Qt6 REQUIRED COMPONENTS Graphs)
+find_package(Qt6 REQUIRED COMPONENTS Concurrent)
 
 
 qt_policy(
@@ -41,7 +41,11 @@ qt_policy(
 # Add executable or library
 qt_add_executable(${TARGET_NAME}
 	main.cpp
+	VpnProfile.h
+	VpnProfilesModel.h
+	VpnProfilesModel.cpp
 	ServiceController.h
+	ServiceController.cpp
 )
 
 #set_source_files_properties(Main.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
@@ -54,7 +58,9 @@ qt_add_qml_module(${TARGET_NAME}
 		Main.qml
 
 	RESOURCES
-		# IMAGES to add later
+		# images
+		resources/images/i_modify.svg
+		resources/images/i_settings.gif
 )
 
 
@@ -68,7 +74,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE Qt6::QuickControls2)
 target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Core)
 target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Gui)
 target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Network)
-target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Graphs)
+target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Concurrent)
 
 target_compile_definitions(${TARGET_NAME} PRIVATE $<$<CONFIG:Debug>:QT_QML_DEBUG>)
 
@@ -78,17 +84,21 @@ set_target_properties(${TARGET_NAME} PROPERTIES
 	QT_WINDOWS_APP_PROJECT_EXECUTION_LEVEL "requireAdministrator"
 )
 
+target_sources(
+	${TARGET_NAME}
+	PRIVATE
+		resources/icon.rc
+)
 
 
 	add_custom_command(TARGET ${TARGET_NAME}
 		POST_BUILD
 		COMMAND
-			C:/Qt/6.11.1/msvc2022_64/bin/windeployqt.exe
+			C:/Qt/${QT_VERSION}/msvc2022_64/bin/windeployqt.exe
 			--qmldir "${CMAKE_CURRENT_SOURCE_DIR}"
 			"$<TARGET_FILE:${TARGET_NAME}>"
 		COMMENT "Running windeployqt"
 	)
-
 
 include(GNUInstallDirs)
 install(TARGETS ${TARGET_NAME}

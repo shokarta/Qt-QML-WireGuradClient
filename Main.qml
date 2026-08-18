@@ -1,243 +1,955 @@
 import QtQuick
+import QtQuick.Dialogs
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtGraphs
 
 ApplicationWindow {
-
-    visible: true
-
+    id: root
     width: 400
     height: 700
-
-    title: "Home VPN"
-
+    visible: true
+    title: "WireGuard VPN Client"
     color: "#FAFAFA"
 
-    property real graphMaxValue: 64
+    property color downloadColor: "#00AA00"
+    property color uploadColor: "#4A86FF"
 
-    ListModel {
-        id: trafficModel
-    }
-
-    Connections {
-
-        target: vpn
-
-        function onTrafficUpdated(rx, tx)
-        {
-            trafficModel.insert(0, {
-                rx: rx,
-                tx: tx
-            })
-
-            while (trafficModel.count > 60)
-            {
-                trafficModel.remove(60)
-            }
-
-            rebuildGraph()
-        }
-    }
-
-    function rebuildGraph()
+    property bool reallyClosing: false
+    onClosing: function(close)
     {
-        downloadSeries.clear()
-        uploadSeries.clear()
+        if (reallyClosing)
+            return
 
-        let maxValue = 64
+        if (!serviceController.askDisconnectOnExit)
+            return
 
-        for (let i = 0; i < trafficModel.count; ++i)
-        {
-            let item =
-                    trafficModel.get(i)
+        if (!serviceController.anyProfileConnected)
+            return
 
-            let x =
-                    59 - i
+        close.accepted = false
 
-            downloadSeries.append(
-                        x,
-                        item.rx)
-
-            uploadSeries.append(
-                        x,
-                        item.tx)
-
-            maxValue =
-                    Math.max(
-                        maxValue,
-                        item.rx,
-                        item.tx)
-        }
-
-        graphMaxValue = maxValue
+        exitDialog.open()
     }
+
+
+    FolderDialog {
+        id: wireGuardFolderDialog
+        title: "Select WireGuard folder"
+        onAccepted: {
+            let folder = selectedFolder.toString().replace("file:///", "").replace(/\//g, "\\");
+            serviceController.setWireGuardFolder(folder);
+        }
+    }
+
 
     ColumnLayout {
-
-        anchors.fill: parent
-        anchors.margins: 15
+        id: mainContent
+        anchors.top: parent.top;            anchors.topMargin: 15
+        anchors.left: parent.left;          anchors.leftMargin: 15
+        anchors.right: parent.right;        anchors.rightMargin: 15
         spacing: 12
 
-        RowLayout {
+        Text {
+            font.bold: true
+            font.pixelSize: 18
+            text: "WIREGUARD PROFILES"
+        }
 
+        Rectangle {
             Layout.fillWidth: true
+            Layout.preferredHeight: errorLayout.height * 1.5
+            border.width: 2
+            border.color: "darkred"
+            radius: height / 5
+            color: "#FF9C9C"
+            visible: !serviceController.wireGuardInstalled
 
-            Switch {
+            RowLayout {
+                id: errorLayout
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: 15
+                spacing: 0
 
-                checked: vpn.connected
+                Text {
+                    font.bold: false
+                    font.pixelSize: 18
+                    text: serviceController.wireGuardError
+                    color: "darkred"
+                }
 
-                onClicked: {
+                Item { Layout.fillWidth: true }        // Extra Space
 
-                    if (checked)
-                        vpn.start()
-                    else
-                        vpn.stop()
+                Text {
+                    font.bold: true
+                    font.pixelSize: 18
+                    //color: root.duarationColor
+                    text: "📁"
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: wireGuardFolderDialog.open()
+                    }
                 }
             }
+        }
 
-            Item {
+
+        Repeater {
+            model: serviceController.profilesModel
+
+            delegate: ColumnLayout {
                 Layout.fillWidth: true
+                spacing: 5
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    Item {
+                        Layout.fillHeight: true
+                        Layout.preferredWidth: switchIndicator.width
+
+						Rectangle {
+							id: switchIndicator
+                            anchors.centerIn: parent
+                            width: height * 2.5
+                            height: parent.height / 2
+							property bool enabled: serviceController.wireGuardInstalled
+							opacity: connectingIndicator.visible ? 0.05 : 1
+							border.width: 1
+							border.color: "black"
+                            radius: parent.height / 7.5
+							color: "white"
+							
+							Rectangle {
+								anchors.top: parent.top
+								anchors.bottom: parent.bottom
+								width: parent.width / 2
+								border.width: 1
+								border.color: "black"
+                                radius: parent.height / 7.5
+                                color: connected || pendingStart ? "lightblue" : "lightgray"
+                                x: connected || pendingStart ? parent.width/2 : 0
+                                Behavior on x { NumberAnimation { duration: 200 } }
+                                Behavior on color { ColorAnimation { duration: 200 } }
+							}
+						}
+						BusyIndicator {
+							id: connectingIndicator
+							anchors.centerIn: parent
+							width: parent.width
+							height: parent.height
+                            running: visible
+                            visible: pendingStart || pendingStop
+						}
+						MouseArea {
+                            anchors.fill: parent
+                            enabled: !connectingIndicator.visible
+							onClicked: {
+                                if (connected) { serviceController.stopProfile(index); }
+                                else { serviceController.startProfile(index); }
+                            }
+						}
+                    }
+
+                    //Item { Layout.fillWidth: true }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: 0
+
+                        Text {
+                            font.bold: true
+                            color: "darkgray"
+                            text: name
+                        }
+                        Text {
+                            color: "black"
+                            text: currentEndpoint.length > 0 ? currentEndpoint : configuredEndpoint
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Image {
+                        //height: parent.height * 0.6
+                        Layout.preferredHeight: parent.height * 0.6
+                        sourceSize.height: height
+                        fillMode: Image.PreserveAspectFit
+                        source: "resources/images/i_modify.svg"
+                        visible: !connected
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                profileEditorDialog.loadProfile(index);
+                                profileEditorDialog.open()
+                            }
+                        }
+                    }
+                }
+                Row {
+                    Layout.fillWidth: true
+                    visible: connected
+
+                    Text {
+                        //Layout.fillWidth: true
+                        //Layout.preferredWidth: parent.width/4
+                        width: parent.width/4
+                        horizontalAlignment: Text.AlignHCenter
+                        color: "black"
+                        text: "↓ " + downloadSpeed
+                    }
+                    //Item { Layout.fillWidth: true }     // Extra Space
+                    Text {
+                        //Layout.fillWidth: true
+                        //Layout.preferredWidth: parent.width/4
+                        width: parent.width/4
+                        horizontalAlignment: Text.AlignHCenter
+                        color: "black"
+                        text: "↑ " + uploadSpeed
+                    }
+                    //Item { Layout.fillWidth: true }     // Extra Space
+                    Text {
+                        //Layout.fillWidth: true
+                        //Layout.preferredWidth: parent.width/4
+                        width: parent.width/4
+                        horizontalAlignment: Text.AlignHCenter
+                        color: "black"
+                        text: "⏱ " + duration
+                    }
+                    //Item { Layout.fillWidth: true }     // Extra Space
+                    Text {
+                        //Layout.fillWidth: true
+                        //Layout.preferredWidth: parent.width/4
+                        width: parent.width/4
+                        horizontalAlignment: Text.AlignHCenter
+                        color: "black"
+                        text: "🤝 " + lastHandshake
+                    }
+                }
             }
-
-            Text {
-
-                text:
-                    vpn.connected
-                    ? "CONNECTED"
-                    : "DISCONNECTED"
-
-                color:
-                    vpn.connected
-                    ? "#00AA00"
-                    : "#CC0000"
-
-                font.bold: true
-                font.pixelSize: 18
-            }
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            height: 1
-            color: "#DDDDDD"
         }
 
         Text {
-            text: "ENDPOINT"
+            //Layout.fillWidth: true
+            Layout.alignment: Qt.AlignHCenter
+            font.pointSize: 16
             font.bold: true
-        }
+            color: "darkgreen"
+            text: "ADD NEW PROFILE"
 
-        Text {
-            Layout.fillWidth: true
-            wrapMode: Text.WrapAnywhere
-            text: vpn.endpoint
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            height: 1
-            color: "#DDDDDD"
-        }
-
-        Text {
-            text: "TRAFFIC"
-            font.bold: true
-        }
-
-        RowLayout {
-
-            Text {
-                text: "DOWNLOAD:"
-                font.bold: true
-            }
-
-            Text {
-                text: vpn.currentDownloadSpeed
-                color: "#00AA00"
-            }
-        }
-
-        RowLayout {
-
-            Text {
-                text: "UPLOAD:"
-                font.bold: true
-            }
-
-            Text {
-                text: vpn.currentUploadSpeed
-                color: "#4A86FF"
-            }
-        }
-
-        RowLayout {
-
-            Text {
-                text: "DURATION:"
-                font.bold: true
-            }
-
-            Text {
-                text: vpn.duration
-            }
-        }
-
-        GraphsView {
-
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            theme: GraphsTheme {
-
-                grid.mainColor: "#909090"
-                grid.mainWidth: 0.5
-
-                backgroundColor: "transparent"
-                plotAreaBackgroundColor: "white"
-            }
-
-            axisX: ValueAxis {
-
-                id: xAxis
-
-                min: 0
-                max: 59
-
-                gridVisible: true
-                labelsVisible: true
-                lineVisible: false
-                visible: false
-            }
-
-            axisY: ValueAxis {
-
-                id: yAxis
-
-                min: 0
-                max: graphMaxValue * 1.2
-
-                gridVisible: false
-                labelsVisible: false
-                lineVisible: false
-                visible: false
-            }
-
-            LineSeries {
-
-                id: downloadSeries
-
-                color: "#00AA00"
-                width: 2
-            }
-
-            LineSeries {
-
-                id: uploadSeries
-
-                color: "#4A86FF"
-                width: 2
+            MouseArea {
+                anchors.fill: parent
+                onClicked: addProfileDialog.open()
             }
         }
     }
+
+
+
+
+
+    Dialog {
+        id: addProfileDialog
+
+        anchors.centerIn: parent
+
+        modal: true
+
+        closePolicy:
+            Popup.CloseOnEscape |
+            Popup.CloseOnPressOutside
+
+        width: Math.min(root.width * 0.9, 700)
+        height: Math.min(root.height * 0.9, 800)
+
+        title: "Add New VPN Profile"
+
+        property bool addressValid:
+            /^.+\/\d+$/.test(newAddressField.text.trim())
+
+        property bool endpointValid:
+            newEndpointField.text.trim().length > 3
+            && newEndpointField.text.includes(":")
+
+        property bool allowedIpsValid:
+            newAllowedIpsField.text.trim().length > 0
+
+        function isValid()
+        {
+            return newProfileNameField.text.trim().length > 0
+                    && newConfigPathField.text.trim().length > 0
+                    && newPrivateKeyField.text.trim().length > 0
+                    && newPublicKeyField.text.trim().length > 0
+                    && addressValid
+                    && endpointValid
+                    && allowedIpsValid
+        }
+
+        ScrollView {
+            anchors.fill: parent
+
+            ColumnLayout {
+                width: addProfileDialog.width - 50
+                spacing: 10
+
+                Label {
+                    text: "Profile"
+                    font.bold: true
+                }
+
+                TextField {
+                    id: newProfileNameField
+
+                    Layout.fillWidth: true
+
+                    placeholderText: "Profile Name"
+                }
+
+                RowLayout {
+
+                    Layout.fillWidth: true
+
+                    TextField {
+                        id: newConfigPathField
+
+                        Layout.fillWidth: true
+
+                        placeholderText:
+                            "C:\\VPN\\MyVPN.conf"
+                    }
+
+                    Button {
+                        text: "Browse..."
+
+                        onClicked:
+                            addProfileFileDialog.open()
+                    }
+                }
+
+                Label {
+                    text: "Interface"
+                    font.bold: true
+                }
+
+                TextField {
+                    id: newAddressField
+
+                    Layout.fillWidth: true
+
+                    placeholderText: "Address"
+
+                    palette.base:
+                        addProfileDialog.addressValid
+                        ? "white"
+                        : "#FFEAEA"
+                }
+
+                TextField {
+                    id: newDnsField
+
+                    Layout.fillWidth: true
+
+                    placeholderText: "DNS"
+                }
+
+                TextField {
+                    id: newListenPortField
+
+                    Layout.fillWidth: true
+
+                    placeholderText: "ListenPort"
+                }
+
+                TextArea {
+                    id: newPrivateKeyField
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 80
+
+                    wrapMode: Text.WrapAnywhere
+
+                    placeholderText: "PrivateKey"
+
+                    palette.base:
+                        newPrivateKeyField.text.trim().length > 0
+                        ? "white"
+                        : "#FFEAEA"
+                }
+
+                Label {
+                    text: "Peer"
+                    font.bold: true
+                }
+
+                TextArea {
+                    id: newPublicKeyField
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 70
+
+                    wrapMode: Text.WrapAnywhere
+
+                    placeholderText: "PublicKey"
+
+                    palette.base:
+                        newPublicKeyField.text.trim().length > 0
+                        ? "white"
+                        : "#FFEAEA"
+                }
+
+                TextArea {
+                    id: newPresharedKeyField
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 70
+
+                    wrapMode: Text.WrapAnywhere
+
+                    placeholderText: "PresharedKey"
+                }
+
+                TextField {
+                    id: newEndpointField
+
+                    Layout.fillWidth: true
+
+                    placeholderText: "Endpoint"
+
+                    palette.base:
+                        addProfileDialog.endpointValid
+                        ? "white"
+                        : "#FFEAEA"
+                }
+
+                TextField {
+                    id: newAllowedIpsField
+
+                    Layout.fillWidth: true
+
+                    placeholderText: "AllowedIPs"
+
+                    palette.base:
+                        addProfileDialog.allowedIpsValid
+                        ? "white"
+                        : "#FFEAEA"
+                }
+
+                RowLayout {
+
+                    Label {
+                        text: "Persistent Keepalive"
+                    }
+
+                    SpinBox {
+                        id: newKeepaliveField
+
+                        from: 0
+                        to: 300
+
+                        value: 25
+                    }
+                }
+
+                Item {
+                    Layout.fillHeight: true
+                }
+
+                RowLayout {
+
+                    Layout.fillWidth: true
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Button {
+                        text: "Cancel"
+
+                        onClicked:
+                            addProfileDialog.close()
+                    }
+
+                    Button {
+
+                        text: "Create"
+
+                        enabled:
+                            addProfileDialog.isValid()
+
+                        onClicked: {
+
+                            if (!addProfileDialog.isValid())
+                                return
+
+                            if (serviceController.addProfile(
+                                    {
+                                        "ProfileName":
+                                            newProfileNameField.text,
+
+                                        "ConfigPath":
+                                            newConfigPathField.text,
+
+                                        "PrivateKey":
+                                            newPrivateKeyField.text,
+
+                                        "Address":
+                                            newAddressField.text,
+
+                                        "DNS":
+                                            newDnsField.text,
+
+                                        "ListenPort":
+                                            newListenPortField.text,
+
+                                        "PublicKey":
+                                            newPublicKeyField.text,
+
+                                        "PresharedKey":
+                                            newPresharedKeyField.text,
+
+                                        "Endpoint":
+                                            newEndpointField.text,
+
+                                        "AllowedIPs":
+                                            newAllowedIpsField.text,
+
+                                        "PersistentKeepalive":
+                                            newKeepaliveField.value
+                                    }))
+                            {
+                                addProfileDialog.close()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: profileEditorDialog
+        anchors.centerIn: parent
+
+        modal: true
+
+        closePolicy:
+            Popup.CloseOnEscape |
+            Popup.CloseOnPressOutside
+
+        width: Math.min(root.width * 0.9, 700)
+        height: Math.min(root.height * 0.85, 750)
+
+        property int profileIndex: -1
+
+        title: "Edit VPN Profile"
+
+        property bool addressValid: /^.+\/\d+$/.test(addressField.text.trim())
+        property bool endpointValid: endpointField.text.includes(":")
+        property bool allowedIpsValid: allowedIpsField.text.trim().length > 0
+
+        function isValid()
+        {
+            return privateKeyField.text.trim().length > 0
+                    && publicKeyField.text.trim().length > 0
+                    && addressValid
+                    && endpointValid
+                    && allowedIpsValid
+        }
+        property color invalidColor: "#CC0000"
+
+        function loadProfile(row)
+        {
+            profileIndex = row
+
+            let cfg =
+                    serviceController.loadProfileConfig(row)
+
+            privateKeyField.text =
+                    cfg["PrivateKey"] || ""
+
+            addressField.text =
+                    cfg["Address"] || ""
+
+            dnsField.text =
+                    cfg["DNS"] || ""
+
+            listenPortField.text =
+                    cfg["ListenPort"] || ""
+
+            publicKeyField.text =
+                    cfg["PublicKey"] || ""
+
+            presharedKeyField.text =
+                    cfg["PresharedKey"] || ""
+
+            endpointField.text =
+                    cfg["Endpoint"] || ""
+
+            allowedIpsField.text =
+                    cfg["AllowedIPs"] || ""
+
+            keepaliveField.value =
+                    Number(cfg["PersistentKeepalive"] || 0)
+        }
+
+        ScrollView {
+            anchors.fill: parent
+
+            ColumnLayout {
+                id: editFormLayouut
+                width: profileEditorDialog.width - 50
+
+                spacing: 10
+
+                //
+                // Interface
+                //
+
+                Label {
+                    text: "Interface"
+                    font.bold: true
+                }
+
+                TextField {
+                    id: addressField
+                    Layout.fillWidth: true
+                    placeholderText: "Address"
+                    palette.base: profileEditorDialog.addressValid ? "white" : "#FFEAEA"
+                }
+
+                TextField {
+                    id: dnsField
+                    Layout.fillWidth: true
+                    placeholderText: "DNS"
+                }
+
+                TextField {
+                    id: listenPortField
+                    Layout.fillWidth: true
+                    placeholderText: "ListenPort"
+                }
+
+                TextArea {
+                    id: privateKeyField
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 80
+
+                    wrapMode: Text.WrapAnywhere
+
+                    placeholderText: "PrivateKey"
+
+                    palette.base: privateKeyField.text.trim().length > 0 ? "#C0C0C0" : "red"
+                }
+
+                //
+                // Peer
+                //
+
+                Label {
+                    text: "Peer"
+                    font.bold: true
+                }
+
+                TextArea {
+                    id: publicKeyField
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 70
+
+                    wrapMode: Text.WrapAnywhere
+
+                    placeholderText: "PublicKey"
+
+                    palette.base: publicKeyField.text.trim().length > 0 ? "#C0C0C0" : "red"
+                }
+
+                TextArea {
+                    id: presharedKeyField
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 70
+
+                    wrapMode: Text.WrapAnywhere
+
+                    placeholderText: "PresharedKey"
+                }
+
+                TextField {
+                    id: endpointField
+
+                    Layout.fillWidth: true
+
+                    placeholderText: "Endpoint"
+
+                    palette.base: profileEditorDialog.endpointValid ? "white" : "#FFEAEA"
+                }
+
+                TextField {
+                    id: allowedIpsField
+
+                    Layout.fillWidth: true
+
+                    placeholderText: "AllowedIPs"
+
+                    palette.base: profileEditorDialog.allowedIpsValid ? "white" : "#FFEAEA"
+                }
+
+                RowLayout {
+
+                    Label {
+                        text: "Persistent Keepalive"
+                    }
+
+                    SpinBox {
+                        id: keepaliveField
+
+                        from: 0
+                        to: 300
+                        value: 25
+                    }
+                }
+
+                Item {
+                    Layout.fillHeight: true
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Button {
+                        text: " Delete "
+
+                        onClicked: {
+
+                            deleteProfileDialog.profileIndex =
+                                profileEditorDialog.profileIndex
+
+                            deleteProfileDialog.open()
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Button {
+                        text: " Cancel "
+
+                        onClicked:
+                            profileEditorDialog.close()
+                    }
+
+                    Button {
+                        text: " Save "
+
+                        enabled: profileEditorDialog.isValid()
+
+                        onClicked: {
+
+                            if (!profileEditorDialog.isValid())
+                                return
+
+                            if (serviceController.saveProfileConfig(
+                                        profileEditorDialog.profileIndex,
+                                        {
+                                            "PrivateKey": privateKeyField.text,
+                                            "Address": addressField.text,
+                                            "DNS": dnsField.text,
+                                            "ListenPort": listenPortField.text,
+
+                                            "PublicKey": publicKeyField.text,
+                                            "PresharedKey": presharedKeyField.text,
+
+                                            "Endpoint": endpointField.text,
+                                            "AllowedIPs": allowedIpsField.text,
+
+                                            "PersistentKeepalive": keepaliveField.value
+                                        })) {
+
+                                profileEditorDialog.close()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: deleteProfileDialog
+        anchors.centerIn: parent
+
+        modal: true
+
+        width: 225
+        height: 150
+
+        closePolicy:
+            Popup.CloseOnEscape |
+            Popup.CloseOnPressOutside
+
+        property int profileIndex: -1
+
+        title: "Delete Profile"
+
+        ColumnLayout {
+            id: deleteFormLayout
+
+            Text {
+                text: "Really delete this VPN profile?"
+            }
+
+            CheckBox {
+                id: deleteConfigCheckBox
+
+                text: "Delete configuration file too"
+            }
+
+            RowLayout {
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Button {
+                    text: "Cancel"
+
+                    onClicked:
+                        deleteProfileDialog.close()
+                }
+
+                Button {
+                    text: "Delete"
+
+                    highlighted: true
+
+                    onClicked: {
+
+                        serviceController.deleteProfile(
+                                    deleteProfileDialog.profileIndex,
+                                    deleteConfigCheckBox.checked)
+
+                        deleteProfileDialog.close()
+
+                        profileEditorDialog.close()
+                    }
+                }
+            }
+        }
+    }
+
+
+    FileDialog {
+        id: addProfileFileDialog
+
+        title: "Create WireGuard configuration"
+
+        fileMode: FileDialog.SaveFile
+
+        nameFilters: [ "WireGuard (*.conf)" ]
+
+        onAccepted: {
+
+            let path =
+                    selectedFile.toString()
+                    .replace("file:///", "")
+                    .replace(/\//g, "\\")
+
+            if (!path.toLowerCase().endsWith(".conf"))
+            {
+                path += ".conf"
+            }
+
+            newConfigPathField.text = path
+        }
+    }
+
+
+    Dialog {
+        id: exitDialog
+
+        anchors.centerIn: parent
+
+        modal: true
+
+        title: "Exit Application"
+
+        ColumnLayout {
+
+            spacing: 10
+
+            Text {
+                text:
+                    "Disconnect all VPN connections before exiting?"
+            }
+
+            CheckBox {
+                id: doNotAskAgainCheck
+
+                text: "Do not ask again"
+            }
+
+            RowLayout {
+
+                Button {
+                    text: "Cancel"
+
+                    onClicked:
+                        exitDialog.close()
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Button {
+
+                    text: "Exit"
+
+                    onClicked: {
+
+                        if (doNotAskAgainCheck.checked)
+                        {
+                            serviceController.askDisconnectOnExit =
+                                false
+                        }
+
+                        root.reallyClosing = true
+
+                        root.close()
+                    }
+                }
+
+                Button {
+
+                    text: "Disconnect && Exit"
+
+                    highlighted: true
+
+                    onClicked: {
+
+                        if (doNotAskAgainCheck.checked)
+                        {
+                            serviceController.askDisconnectOnExit =
+                                false
+                        }
+
+                        serviceController.disconnectAllProfiles()
+
+                        root.reallyClosing = true
+
+                        root.close()
+                    }
+                }
+            }
+        }
+    }
+
 }
