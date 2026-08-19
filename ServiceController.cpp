@@ -20,6 +20,32 @@ ServiceController::ServiceController(QObject *parent) : QObject(parent)
 	m_updateTimer.start(1000);
 }
 
+int ServiceController::pingHost(const QString &host)
+{
+	QProcess ping;
+	ping.start(
+		"ping",
+		{
+			"-n",
+			"1",
+			host
+		});
+
+	if (!ping.waitForFinished(3000)) {
+		ping.kill();
+		ping.waitForFinished();
+		return -1;
+	}
+
+	QString output = QString::fromUtf8(ping.readAllStandardOutput());
+
+	QRegularExpression re(R"((\d+)\s*ms)", QRegularExpression::CaseInsensitiveOption);
+	auto match = re.match(output);
+	if (!match.hasMatch()) { return -1; }
+
+	return match.captured(1).toInt();
+}
+
 quint64 ServiceController::parseSize(QString text)
 {
 	text.remove("received");
@@ -198,12 +224,11 @@ void ServiceController::detectWireGuard()
 	emit wireGuardInstalledChanged();
 }
 
-void ServiceController::discoverProfiles()
+QList<VpnProfile> ServiceController::discoverProfilesWorker()
 {
 	QList<VpnProfile> profiles;
 
 	QProcess process;
-
 	process.start(
 		"powershell",
 		{
@@ -213,7 +238,7 @@ void ServiceController::discoverProfiles()
 
 	if (!process.waitForFinished(5000)) {
 		process.kill();
-		return;
+		return profiles;
 	}
 
 	QString output = QString::fromUtf8(process.readAllStandardOutput());
@@ -230,12 +255,9 @@ void ServiceController::discoverProfiles()
 		if (parts.size() < 2) { continue; }
 
 		VpnProfile profile;
-
-		profile.serviceName = parts[0];
-
-		profile.displayName = parts.mid(1).join(' ');
-
-		profile.displayName.remove("WireGuard Tunnel: ");
+			profile.serviceName = parts[0];
+			profile.displayName = parts.mid(1).join(' ');
+			profile.displayName.remove("WireGuard Tunnel: ");
 
 		// Get config path from service
 		QProcess qc;
@@ -255,11 +277,9 @@ void ServiceController::discoverProfiles()
 
 			if (match.hasMatch()) {
 				QString configPath = match.captured(1).trimmed();
-
-				profile.configPath = configPath;
+					profile.configPath = configPath;
 
 				QFile configFile(configPath);
-
 				if (configFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
 					QTextStream stream(&configFile);
 
@@ -280,7 +300,22 @@ void ServiceController::discoverProfiles()
 		profiles.append(profile);
 	}
 
-	m_profilesModel.setProfiles(profiles);
+	return profiles;
+}
+void ServiceController::discoverProfiles()
+{
+	// Do not start another discovery while one is already running.
+	if (m_discoverWatcher.isRunning()) { return; }
+
+	QFuture<QList<VpnProfile>> future = QtConcurrent::run([this]() { return discoverProfilesWorker(); });
+
+	connect(&m_discoverWatcher, &QFutureWatcher<QList<VpnProfile>>::finished, this, [this]() {
+		QList<VpnProfile> profiles = m_discoverWatcher.result();
+		m_profilesModel.setProfiles(profiles);
+	},
+	Qt::SingleShotConnection);
+
+	m_discoverWatcher.setFuture(future);
 }
 
 void ServiceController::disconnectAllProfiles()
@@ -360,151 +395,24 @@ void ServiceController::refreshProfiles()
 
 void ServiceController::updateProfiles()
 {
-	auto &profiles = m_profilesModel.profiles();
+	if (m_runtimeWatcher.isRunning()) { return; }
 
-	bool wasAnyConnected = anyProfileConnected();
+	QStringList serviceNames;
+	const auto &profiles = m_profilesModel.profiles();
+	for (const VpnProfile &profile : profiles) { serviceNames.append(profile.serviceName); }
 
-	// Query running services
-	for (int row = 0; row < profiles.size(); row++) {
-		VpnProfile &profile = profiles[row];
+	QString wireGuardExePath = wireGuardExe();
+	QFuture<QList<ProfileRuntimeData>> future = QtConcurrent::run([serviceNames, wireGuardExePath]() {
+		return collectRuntimeDataWorker(serviceNames, wireGuardExePath);
+	});
 
-		QProcess service;
+	connect(&m_runtimeWatcher, &QFutureWatcher<QList<ProfileRuntimeData>>::finished, this, [this]() {
+			QList<ProfileRuntimeData> runtimeData = m_runtimeWatcher.result();
+			applyRuntimeData(runtimeData);
+		},
+		Qt::SingleShotConnection);
 
-		service.start(
-			"sc",
-			{
-				"query",
-				profile.serviceName
-			});
-
-		if (!service.waitForFinished(3000)) {
-			service.kill();
-			continue;
-		}
-
-		QString serviceOutput = QString::fromUtf8(service.readAllStandardOutput());
-
-		bool connected = serviceOutput.contains("RUNNING");
-
-		if (connected != profile.connected) {
-			profile.connected = connected;
-
-			if (connected) {
-				profile.pendingStart = false;
-				profile.connectedSince = QDateTime::currentDateTime();
-			}
-
-			if (!connected) { profile.pendingStop = false; }
-		}
-
-		if (!connected) {
-			profile.currentEndpoint.clear();
-
-			profile.lastHandshakeSeconds = -1;
-
-			profile.downloadSpeed = "0 KB/s";
-			profile.uploadSpeed = "0 KB/s";
-
-			profile.lastRxBytes = 0;
-			profile.lastTxBytes = 0;
-
-			m_profilesModel.refreshRow(row);
-
-			continue;
-		}
-	}
-
-	// Query WireGuard
-	QProcess wg;
-	wg.start(
-		wireGuardExe(),
-		{ "show" });
-
-	if (!wg.waitForFinished(3000)) {
-		wg.kill();
-		return;
-	}
-
-	QString output = QString::fromUtf8(wg.readAllStandardOutput());
-
-	QStringList interfaces = output.split("interface:");
-
-	for (QString interfaceBlock : interfaces) {
-		interfaceBlock = interfaceBlock.trimmed();
-
-		if (interfaceBlock.isEmpty()) { continue; }
-
-		QString interfaceName = interfaceBlock.section('\n', 0, 0).trimmed();
-
-		for (int row = 0; row < profiles.size(); row++) {
-			VpnProfile &profile = profiles[row];
-
-			QString tunnelName = profile.serviceName;
-
-			tunnelName.remove("WireGuardTunnel$");
-
-			if (tunnelName != interfaceName) { continue; }
-
-			const QStringList lines = interfaceBlock.split('\n');
-
-			for (const QString &line : lines) {
-				QString trimmed = line.trimmed();
-
-				// endpoint
-				if (trimmed.startsWith("endpoint:")) { profile.currentEndpoint = trimmed.section(':', 1) .trimmed(); }
-
-				// handshake
-				if (trimmed.startsWith("latest handshake:")) {
-					QString handshakeText = trimmed.section(':', 1).trimmed();
-
-					qint64 seconds = 0;
-
-					QRegularExpression hoursRe(R"((\d+)\s+hour)");
-					QRegularExpression minutesRe(R"((\d+)\s+minute)");
-					QRegularExpression secondsRe(R"((\d+)\s+second)");
-
-					auto h = hoursRe.match(handshakeText);
-
-					auto m = minutesRe.match(handshakeText);
-
-					auto s = secondsRe.match(handshakeText);
-
-					if (h.hasMatch()) { seconds += h.captured(1).toLongLong() * 3600; }
-
-					if (m.hasMatch()) {
-						seconds += m.captured(1).toLongLong() * 60; }
-
-					if (s.hasMatch()) { seconds += s.captured(1).toLongLong(); }
-
-					profile.lastHandshakeSeconds = seconds;
-				}
-
-				// transfer
-				if (trimmed.startsWith("transfer:")) {
-					QStringList parts = trimmed.mid(QString("transfer:").length()).split(',');
-
-					if (parts.size() >= 2) {
-						quint64 rx = parseSize(parts[0]);
-						quint64 tx = parseSize(parts[1]);
-
-						if (profile.lastRxBytes) {
-							profile.downloadSpeed = formatSpeed(rx - profile.lastRxBytes);
-							profile.uploadSpeed = formatSpeed(tx - profile.lastTxBytes);
-						}
-
-						profile.lastRxBytes = rx;
-						profile.lastTxBytes = tx;
-					}
-				}
-			}
-
-			m_profilesModel.refreshRow(row);
-		}
-	}
-
-	bool nowAnyConnected = anyProfileConnected();
-
-	if (wasAnyConnected != nowAnyConnected) { emit anyProfileConnectedChanged(); }
+	m_runtimeWatcher.setFuture(future);
 }
 
 bool ServiceController::addProfile(const QVariantMap &config)
@@ -692,110 +600,29 @@ bool ServiceController::saveProfileConfig(int row, const QVariantMap &config)
 
 	if (row < 0 || row >= profiles.size()) { return false; }
 
+	if (m_saveProfileWatcher.isRunning()) { return false; }
+
 	VpnProfile &profile = profiles[row];
 
-	// Stop service
-	QProcess stop;
-	stop.start(
-		"sc",
-		{
-			"stop",
-			profile.serviceName
-		});
+	QString configPath = profile.configPath;
 
-	stop.waitForFinished(10000);
+	QString wireGuardPath = m_wireGuardPath;
 
-	// Read config
-	QFile file(profile.configPath);
+	QString serviceName = profile.serviceName;
 
-	if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) { return false; }
 
-	QString content = QString::fromUtf8(file.readAll());
+	QFuture<SaveProfileResult> future = QtConcurrent::run([this, configPath, wireGuardPath, serviceName, config]() {
+		return saveProfileConfigWorker(configPath, wireGuardPath, serviceName, config);
+	});
 
-	file.close();
 
-	// Backup
-	QFile::remove(profile.configPath + ".bak");
+	connect(&m_saveProfileWatcher, &QFutureWatcher<SaveProfileResult>::finished, this, [this, row]() {
+			SaveProfileResult result = m_saveProfileWatcher.result();
+			applySaveProfileResult(row, result);
+		},
+		Qt::SingleShotConnection);
 
-	QFile::copy(profile.configPath, profile.configPath + ".bak");
-
-	QStringList lines = content.split('\n');
-
-	// Required Interface
-	setOrInsertInSection(lines, "Interface", "PrivateKey", config.value("PrivateKey").toString());
-
-	setOrInsertInSection(lines, "Interface", "Address", config.value( "Address").toString());
-
-	// Optional Interface
-	QString dns = config.value("DNS").toString();
-
-	if (dns.isEmpty()) { removeKey(lines, "DNS"); }
-	else { setOrInsertInSection(lines, "Interface", "DNS", dns); }
-
-	QString listenPort = config.value("ListenPort").toString();
-
-	if (listenPort.isEmpty()) { removeKey(lines, "ListenPort"); }
-	else { setOrInsertInSection(lines, "Interface", "ListenPort", listenPort); }
-
-	// Required Peer
-	setOrInsertInSection(lines, "Peer", "PublicKey", config.value( "PublicKey").toString());
-
-	setOrInsertInSection(lines, "Peer", "Endpoint", config.value("Endpoint").toString());
-
-	setOrInsertInSection(lines, "Peer", "AllowedIPs", config.value("AllowedIPs").toString());
-
-	// Optional Peer
-	QString presharedKey = config.value("PresharedKey").toString();
-
-	if (presharedKey.isEmpty()) { removeKey(lines, "PresharedKey"); }
-	else { setOrInsertInSection(lines, "Peer", "PresharedKey", presharedKey); }
-
-	QString keepalive = config.value("PersistentKeepalive").toString();
-
-	if (keepalive.isEmpty() || keepalive == "0") { removeKey(lines, "PersistentKeepalive"); }
-	else { setOrInsertInSection(lines, "Peer", "PersistentKeepalive", keepalive); }
-
-	// Save file
-	if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) { return false; }
-
-	QTextStream stream(&file);
-
-	stream << lines.join('\n');
-
-	file.close();
-
-	// Uninstall service
-	QProcess uninstall;
-	uninstall.start(
-		m_wireGuardPath +
-		"/wireguard.exe",
-		{
-			"/uninstalltunnelservice",
-			profile.configPath
-		});
-
-	if (!uninstall.waitForFinished(15000)) {
-		uninstall.kill();
-		return false;
-	}
-
-	// Install service
-	QProcess install;
-	install.start(
-		m_wireGuardPath +
-		"/wireguard.exe",
-		{
-			"/installtunnelservice",
-			profile.configPath
-		});
-
-	if (!install.waitForFinished(15000)) {
-		install.kill();
-		return false;
-	}
-
-	// Refresh UI
-	discoverProfiles();
+	m_saveProfileWatcher.setFuture(future);
 
 	return true;
 }
@@ -840,4 +667,357 @@ bool ServiceController::deleteProfile(int row, bool deleteConfigFile)
 	discoverProfiles();
 
 	return true;
+}
+
+
+QList<ProfileRuntimeData>ServiceController::collectRuntimeDataWorker(const QStringList &serviceNames, const QString &wireGuardExe)
+{
+	QList<ProfileRuntimeData> result;
+
+	// 1. Query service state
+	for (const QString &serviceName : serviceNames) {
+		ProfileRuntimeData data;
+			data.serviceName = serviceName;
+
+		QProcess service;
+		service.start(
+			"sc",
+			{
+				"query",
+				serviceName
+			});
+
+		if (!service.waitForFinished(3000)) {
+			service.kill();
+			result.append(data);
+			continue;
+		}
+
+		QString serviceOutput = QString::fromUtf8(service.readAllStandardOutput());
+
+		data.connected = serviceOutput.contains("RUNNING");
+
+		result.append(data);
+	}
+
+
+	// 2. If no profile is connected, we're done
+	bool anyConnected = false;
+	for (const auto &data : result) {
+		if (data.connected) {
+			anyConnected = true;
+			break;
+		}
+	}
+
+	if (!anyConnected) { return result; }
+
+
+	// 3. Query WireGuard
+	QProcess wg;
+	wg.start(
+		wireGuardExe,
+		{
+			"show"
+		});
+
+	if (!wg.waitForFinished(3000)) {
+		wg.kill();
+		return result;
+	}
+
+	QString output = QString::fromUtf8(wg.readAllStandardOutput());
+	QStringList interfaces = output.split("interface:");
+
+
+	// 4. Parse interfaces
+	for (QString interfaceBlock : interfaces) {
+		interfaceBlock = interfaceBlock.trimmed();
+
+		if (interfaceBlock.isEmpty()) { continue; }
+
+		QString interfaceName = interfaceBlock.section('\n', 0, 0).trimmed();
+
+		// Find matching result
+		ProfileRuntimeData *data = nullptr;
+		for (auto &item : result) {
+			QString tunnelName = item.serviceName;
+			tunnelName.remove("WireGuardTunnel$");
+
+			if (tunnelName == interfaceName) {
+				data = &item;
+				break;
+			}
+		}
+
+		if (!data || !data->connected) { continue; }
+
+
+		// Parse WireGuard information
+		const QStringList lines = interfaceBlock.split('\n');
+
+		QString handshakeText;
+
+		QString transferText;
+
+		for (const QString &line : lines) {
+			QString trimmed = line.trimmed();
+
+			// endpoint
+			if (trimmed.startsWith("endpoint:")) { data->currentEndpoint = trimmed.section(':', 1).trimmed(); }
+
+			// handshake
+			if (trimmed.startsWith("latest handshake:")) { handshakeText = trimmed.section(':', 1).trimmed(); }
+
+			// transfer
+			if (trimmed.startsWith("transfer:")) { transferText = trimmed.mid(QString("transfer:").length()).trimmed();}
+		}
+
+		// Parse handshake
+		if (!handshakeText.isEmpty()) {
+			qint64 seconds = 0;
+
+			QRegularExpression hoursRe(R"((\d+)\s+hour)");
+			QRegularExpression minutesRe(R"((\d+)\s+minute)");
+			QRegularExpression secondsRe(R"((\d+)\s+second)");
+
+			auto h = hoursRe.match(handshakeText);
+			auto m = minutesRe.match(handshakeText);
+			auto s = secondsRe.match(handshakeText);
+
+
+			if (h.hasMatch()) { seconds += h.captured(1).toLongLong() * 3600; }
+			if (m.hasMatch()) { seconds += m.captured(1).toLongLong() * 60; }
+			if (s.hasMatch()) { seconds += s.captured(1).toLongLong(); }
+
+			data->lastHandshakeSeconds = seconds;
+		}
+
+		// Parse transfer
+		if (!transferText.isEmpty()) {
+
+			QStringList parts = transferText.split(',');
+
+			if (parts.size() >= 2) {
+				data->rx = ServiceController::parseSize(parts[0]);
+				data->tx = ServiceController::parseSize(parts[1]);
+			}
+		}
+
+		// Ping
+		if (!data->currentEndpoint.isEmpty()) {
+			QString host = data->currentEndpoint.section(':', 0, 0).trimmed();
+			if (!host.isEmpty()) { data->currentPingMs = ServiceController::pingHost(host); }
+		}
+	}
+
+	return result;
+}
+
+void ServiceController::applyRuntimeData(const QList<ProfileRuntimeData> &runtimeData)
+{
+	auto &profiles = m_profilesModel.profiles();
+
+	bool wasAnyConnected = anyProfileConnected();
+
+	for (int row = 0; row < profiles.size(); row++) {
+		VpnProfile &profile = profiles[row];
+
+		// Find corresponding runtime data
+		const ProfileRuntimeData *data = nullptr;
+
+		for (const auto &item : runtimeData) {
+			if (item.serviceName == profile.serviceName) {
+				data = &item;
+				break;
+			}
+		}
+
+		if (!data) { continue; }
+
+		// Connection state
+		if (data->connected != profile.connected) {
+			profile.connected = data->connected;
+
+			if (data->connected) {
+				profile.pendingStart = false;
+				profile.connectedSince = QDateTime::currentDateTime();
+			}
+			else {
+				profile.pendingStop = false;
+				profile.currentEndpoint.clear();
+
+				profile.lastHandshakeSeconds = -1;
+
+				profile.downloadSpeed = "0 KB/s";
+				profile.uploadSpeed = "0 KB/s";
+
+				profile.lastRxBytes = 0;
+				profile.lastTxBytes = 0;
+			}
+		}
+
+		if (!data->connected) {
+			m_profilesModel.refreshRow(row);
+			continue;
+		}
+
+		// Endpoint
+		profile.currentEndpoint = data->currentEndpoint;
+
+		// Ping
+		profile.currentPingMs = data->currentPingMs;
+
+		if (data->currentPingMs >= 0) {
+			if (!profile.lastHistoryPingUpdate.isValid() || profile.lastHistoryPingUpdate.secsTo(QDateTime::currentDateTime()) >= 5 ) {
+				profile.pingHistory.append(data->currentPingMs);
+
+				while (profile.pingHistory.size() > 30 ) { profile.pingHistory.removeFirst(); }
+
+				profile.lastHistoryPingUpdate = QDateTime::currentDateTime();
+			}
+		}
+
+		// Handshake
+		profile.lastHandshakeSeconds = data->lastHandshakeSeconds;
+
+		// Transfer
+		if (profile.lastRxBytes) {
+			if (data->rx >= profile.lastRxBytes) { profile.downloadSpeed = formatSpeed(data->rx - profile.lastRxBytes); }
+			if (data->tx >= profile.lastTxBytes) { profile.uploadSpeed = formatSpeed(data->tx - profile.lastTxBytes); }
+		}
+
+		profile.lastRxBytes = data->rx;
+		profile.lastTxBytes = data->tx;
+
+		// Notify QML
+		m_profilesModel.refreshRow(row);
+	}
+
+	bool nowAnyConnected = anyProfileConnected();
+
+	if (wasAnyConnected != nowAnyConnected) { emit anyProfileConnectedChanged(); }
+}
+
+SaveProfileResult ServiceController::saveProfileConfigWorker(QString configPath, QString wireGuardPath, QString serviceName, QVariantMap config)
+{
+	SaveProfileResult result;
+
+	// Stop service
+	QProcess stop;
+	stop.start(
+		"sc",
+		{
+			"stop",
+			serviceName
+		});
+
+	if (!stop.waitForFinished(10000)) {
+		stop.kill();
+		stop.waitForFinished();
+
+		result.error = "Failed to stop WireGuard service";
+		return result;
+	}
+
+	// Read config
+	QFile file(configPath);
+	if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		result.error = "Failed to open configuration file";
+		return result;
+	}
+
+	QString content = QString::fromUtf8(file.readAll());
+	file.close();
+
+
+	// Backup
+	QFile::remove(configPath + ".bak");
+	QFile::copy(configPath, configPath + ".bak");
+
+	QStringList lines = content.split('\n');
+
+	// Interface
+	setOrInsertInSection(lines, "Interface", "PrivateKey", config.value("PrivateKey").toString());
+	setOrInsertInSection(lines, "Interface", "Address", config.value("Address").toString());
+
+	QString dns = config.value("DNS").toString();
+		if (dns.isEmpty()) { removeKey(lines, "DNS"); }
+		else { setOrInsertInSection(lines, "Interface", "DNS", dns); }
+
+	QString listenPort = config.value("ListenPort").toString();
+		if (listenPort.isEmpty()) { removeKey(lines, "ListenPort"); }
+		else { setOrInsertInSection(lines, "Interface", "ListenPort", listenPort); }
+
+	// Peer
+	setOrInsertInSection(lines, "Peer", "PublicKey", config.value("PublicKey").toString());
+	setOrInsertInSection(lines, "Peer", "Endpoint", config.value("Endpoint").toString());
+	setOrInsertInSection(lines, "Peer", "AllowedIPs", config.value("AllowedIPs").toString());
+
+	QString presharedKey = config.value("PresharedKey").toString();
+		if (presharedKey.isEmpty()) { removeKey(lines, "PresharedKey"); }
+		else { setOrInsertInSection(lines, "Peer", "PresharedKey", presharedKey); }
+
+	QString keepalive = config.value("PersistentKeepalive").toString();
+		if (keepalive.isEmpty() || keepalive == "0") { removeKey( lines, "PersistentKeepalive"); }
+		else { setOrInsertInSection(lines, "Peer", "PersistentKeepalive", keepalive); }
+
+	// Save config
+	if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+		result.error = "Failed to write configuration file";
+		return result;
+	}
+
+	QTextStream stream(&file);
+		stream << lines.join('\n');
+	file.close();
+
+	// Uninstall service
+	QProcess uninstall;
+	uninstall.start(
+		wireGuardPath +
+		"/wireguard.exe",
+		{
+			"/uninstalltunnelservice",
+			configPath
+		});
+
+	if (!uninstall.waitForFinished(15000)) {
+		uninstall.kill();
+		uninstall.waitForFinished();
+
+		result.error = "Failed to uninstall WireGuard service";
+		return result;
+	}
+
+	// Install service
+	QProcess install;
+	install.start(
+		wireGuardPath +
+		"/wireguard.exe",
+		{
+			"/installtunnelservice",
+			configPath
+		});
+
+	if (!install.waitForFinished(15000)) {
+		install.kill();
+		install.waitForFinished();
+
+		result.error = "Failed to install WireGuard service";
+		return result;
+	}
+
+	result.success = true;
+	return result;
+}
+
+void ServiceController::applySaveProfileResult(int row, const SaveProfileResult &result)
+{
+	if (!result.success) {
+		qWarning() << "Failed to save profile:" << result.error;
+		return;
+	}
+
+	discoverProfiles();
 }

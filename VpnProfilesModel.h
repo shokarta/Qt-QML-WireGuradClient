@@ -10,6 +10,7 @@ class VpnProfilesModel : public QAbstractListModel
 {
     Q_OBJECT
 
+
 public:
 
     enum Roles {
@@ -25,6 +26,9 @@ public:
         ConfiguredEndpointRole,
         CurrentEndpointRole,
 
+        PingRole,
+        PingHistoryRole,
+
         HandshakeRole,
 
         DownloadRole,
@@ -35,23 +39,20 @@ public:
 
     explicit VpnProfilesModel(QObject *parent = nullptr);
 
-    int rowCount(
-        const QModelIndex &parent = QModelIndex()) const override;
+    int rowCount(const QModelIndex &parent = QModelIndex()) const override;
 
-    QVariant data(
-        const QModelIndex &index,
-        int role = Qt::DisplayRole) const override;
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
     QHash<int, QByteArray> roleNames() const override;
 
-    void setProfiles(
-        const QList<VpnProfile> &profiles);
+    void setProfiles(const QList<VpnProfile> &profiles);
 
-    QList<VpnProfile>& profiles();
+    QList<VpnProfile> &profiles();
 
-    const QList<VpnProfile>& profiles() const;
+    const QList<VpnProfile> &profiles() const;
 
     void refreshRow(int row);
+
 
 private:
 

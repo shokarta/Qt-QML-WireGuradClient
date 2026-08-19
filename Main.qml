@@ -117,7 +117,7 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             width: height * 2.5
                             height: parent.height / 2
-							property bool enabled: serviceController.wireGuardInstalled
+                            property bool active: serviceController.wireGuardInstalled
 							opacity: connectingIndicator.visible ? 0.05 : 1
 							border.width: 1
 							border.color: "black"
@@ -131,7 +131,9 @@ ApplicationWindow {
 								border.width: 1
 								border.color: "black"
                                 radius: parent.height / 7.5
-                                color: connected || pendingStart ? "lightblue" : "lightgray"
+                                color: if (!switchIndicator.active) { return "lightgray"; }
+                                       else if (connected || pendingStart) { return "lightblue"; }
+                                       else { return "lightgray"; }
                                 x: connected || pendingStart ? parent.width/2 : 0
                                 Behavior on x { NumberAnimation { duration: 200 } }
                                 Behavior on color { ColorAnimation { duration: 200 } }
@@ -147,7 +149,9 @@ ApplicationWindow {
 						}
 						MouseArea {
                             anchors.fill: parent
-                            enabled: !connectingIndicator.visible
+                            enabled: if (!switchIndicator.active) { return false; }
+                                     else if (connectingIndicator.visible) { return false; }
+                                     else { return true; }
 							onClicked: {
                                 if (connected) { serviceController.stopProfile(index); }
                                 else { serviceController.startProfile(index); }
@@ -188,6 +192,63 @@ ApplicationWindow {
                             onClicked: {
                                 profileEditorDialog.loadProfile(index);
                                 profileEditorDialog.open()
+                            }
+                        }
+                    }
+
+                    Text {
+                        color: if (ping === null) { return "black"; }
+                               else if (ping < 20) { return "#00C000"; }
+                               else if (ping < 40) { return "#60C000"; }
+                               else if (ping < 60) { return "#A0C000"; }
+                               else if (ping < 80) { return "#D0C000"; }
+                               else if (ping < 100) { return "#FFAA00"; }
+                               else if (ping < 120) { return "#FF7000"; }
+                               else if (ping < 140) { return "#FF3000"; }
+                               else { return "#D00000"; }
+                        text: ping >= 0 ? (ping + " ms") : "-- ms"
+                        visible: connected
+                    }
+                    Row {
+                        id: pingGraph
+                        spacing: 1
+                        visible: connected
+                        property int maxLength: 8
+
+                        Repeater {
+                            model: {
+                                let values = pingHistory.slice(Math.max(0, pingHistory.length - pingGraph.maxLength));
+                                while (values.length < pingGraph.maxLength) { values.unshift(null); }
+                                return values;
+                            }
+                            delegate: Text {
+                                required property var modelData
+                                font.family: "Courier New"
+                                text: {
+                                    let p = modelData;
+
+                                    if (p === null) { return " "; }
+                                    else if (p < 20) { return "▁"; }
+                                    else if (p < 40) { return "▂"; }
+                                    else if (p < 60) { return "▃"; }
+                                    else if (p < 80) { return "▄"; }
+                                    else if (p < 100) { return "▅"; }
+                                    else if (p < 120) { return "▆"; }
+                                    else if (p < 140) { return "▇"; }
+                                    else { return "█"; }
+                                }
+                                color: {
+                                    let p = modelData;
+                                    if (p === null) { return "transparent"; }
+                                    else if (p < 20) { return "#00C000"; }
+                                    else if (p < 40) { return "#60C000"; }
+                                    else if (p < 60) { return "#A0C000"; }
+                                    else if (p < 80) { return "#D0C000"; }
+                                    else if (p < 100) { return "#FFAA00"; }
+                                    else if (p < 120) { return "#FF7000"; }
+                                    else if (p < 140) { return "#FF3000"; }
+                                    else { return "#D00000"; }
+                                }
                             }
                         }
                     }

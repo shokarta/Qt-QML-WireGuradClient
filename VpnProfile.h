@@ -19,6 +19,10 @@ struct VpnProfile
     QString configuredEndpoint;
     QString currentEndpoint;
 
+    int currentPingMs = -1;
+    QList<int> pingHistory;
+    QDateTime lastHistoryPingUpdate;
+
     qint64 lastHandshakeSeconds = -1;
 
     QString downloadSpeed = "0 KB/s";
@@ -28,6 +32,7 @@ struct VpnProfile
     quint64 lastTxBytes = 0;
 
     QDateTime connectedSince;
+
 
     QString duration() const {
         if (!connected) { return "00:00:00"; }

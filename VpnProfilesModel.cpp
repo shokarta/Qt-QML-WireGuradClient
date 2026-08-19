@@ -42,6 +42,15 @@ QVariant VpnProfilesModel::data(const QModelIndex &index, int role) const
         case CurrentEndpointRole:
             return profile.currentEndpoint;
 
+        case PingRole:
+            return profile.currentPingMs;
+
+        case PingHistoryRole: {
+            QVariantList list;
+            for (int value : profile.pingHistory) { list << value; }
+            return list;
+        }
+
         case HandshakeRole:
             return profile.handshakeDuration();
 
@@ -72,6 +81,9 @@ QHash<int, QByteArray>VpnProfilesModel::roleNames() const
 
         { ConfiguredEndpointRole, "configuredEndpoint" },
         { CurrentEndpointRole, "currentEndpoint" },
+
+        { PingRole, "ping" },
+        { PingHistoryRole, "pingHistory" },
 
         { HandshakeRole, "lastHandshake" },
 

@@ -8,7 +8,35 @@
 #include <QTimer>
 #include <QVariantMap>
 
+#include <QtConcurrent>
+#include <QFutureWatcher>
+
 #include "VpnProfilesModel.h"
+
+
+struct ProfileRuntimeData
+{
+    QString serviceName;
+
+    bool connected = false;
+
+    QString currentEndpoint;
+
+    int currentPingMs = -1;
+
+    qint64 lastHandshakeSeconds = -1;
+
+    QString downloadSpeed = "0 KB/s";
+    QString uploadSpeed = "0 KB/s";
+
+    quint64 rx = 0;
+    quint64 tx = 0;
+};
+struct SaveProfileResult
+{
+    bool success = false;
+    QString error;
+};
 
 
 class ServiceController : public QObject
@@ -16,7 +44,7 @@ class ServiceController : public QObject
     Q_OBJECT
 
 
-    Q_PROPERTY(VpnProfilesModel* profilesModel READ profilesModel CONSTANT)
+    Q_PROPERTY(VpnProfilesModel *profilesModel READ profilesModel CONSTANT)
     Q_PROPERTY(bool wireGuardInstalled READ wireGuardInstalled NOTIFY wireGuardInstalledChanged)
     Q_PROPERTY(QString wireGuardPath READ wireGuardPath NOTIFY wireGuardInstalledChanged)
     Q_PROPERTY(QString wireGuardExe READ wireGuardExe NOTIFY wireGuardInstalledChanged)
@@ -68,6 +96,8 @@ public:
 
     Q_INVOKABLE void refreshProfiles();
 
+    static int pingHost(const QString &host);
+
     static quint64 parseSize(QString text);
 
     static QString formatSpeed(quint64 bytesPerSecond);
@@ -92,7 +122,17 @@ private:
 
     void discoverProfiles();
 
+    QList<VpnProfile> discoverProfilesWorker();
+
     void updateProfiles();
+
+    static QList<ProfileRuntimeData> collectRuntimeDataWorker(const QStringList &serviceNames, const QString &wireGuardExe);
+
+    void applyRuntimeData(const QList<ProfileRuntimeData> &runtimeData);
+
+    SaveProfileResult saveProfileConfigWorker(QString configPath, QString wireGuardPath, QString serviceName, QVariantMap config);
+
+    void applySaveProfileResult(int row, const SaveProfileResult &result);
 
 
 private:
@@ -109,4 +149,10 @@ private:
     QTimer m_updateTimer;
 
     bool m_askDisconnectOnExit = true;
+
+    QFutureWatcher<QList<VpnProfile>> m_discoverWatcher;
+
+    QFutureWatcher<QList<ProfileRuntimeData>> m_runtimeWatcher;
+
+    QFutureWatcher<SaveProfileResult> m_saveProfileWatcher;
 };
