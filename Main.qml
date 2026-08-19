@@ -196,10 +196,15 @@ ApplicationWindow {
                     }
                     Row {
                         id: pingGraph
+						Layout.preferredHeight: barWidth * maxHeightMultiplier
                         spacing: 1
-                        visible: connected
+						visible: connected
                         property int maxLength: 8
                         property int maxPing: 200
+						property real barWidth: 8
+						property real maxHeightMultiplier: 3
+						
+						
 
                         function getColor(value) {
                             if (value === null) { return "transparent"; }
@@ -234,8 +239,8 @@ ApplicationWindow {
                             delegate: Rectangle {
                                 required property var modelData
                                 anchors.bottom: parent.bottom
-                                width: 8
-                                height: modelData === null ? 1 : (width * 3 * Math.min(modelData, pingGraph.maxPing) / pingGraph.maxPing);
+                                width: pingGraph.barWidth
+                                height: modelData === null ? 1 : (width * pingGraph.maxHeightMultiplier * Math.min(modelData, pingGraph.maxPing) / pingGraph.maxPing);
                                 color: pingGraph.getColor(modelData)
                             }
                         }
@@ -445,12 +450,12 @@ ApplicationWindow {
                     }
 
                     Button {
-                        text: "Cancel"
+                        text: " Cancel "
                         onClicked: addProfileDialog.close()
                     }
 
                     Button {
-                        text: "Create"
+                        text: " Create "
                         enabled: addProfileDialog.isValid()
                         onClicked: {
                             if (!addProfileDialog.isValid()) { return; }
