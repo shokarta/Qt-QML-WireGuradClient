@@ -18,6 +18,63 @@ ServiceController::ServiceController(QObject *parent) : QObject(parent)
 }
 
 
+// UTILITY HELPERS
+static void setOrInsertInSection(QStringList &lines, const QString &section, const QString &key, const QString &value)
+{
+	bool inSection = false;
+
+	for (QString &line : lines) {
+		QString trimmed = line.trimmed();
+
+		if (trimmed.compare("[" + section + "]", Qt::CaseInsensitive) == 0) {
+			inSection = true;
+			continue;
+		}
+
+		if (inSection && trimmed.startsWith('[')) { inSection = false; }
+
+		if (!inSection) { continue; }
+
+		if (trimmed.startsWith(key + " ", Qt::CaseInsensitive) || trimmed.startsWith(key + "=", Qt::CaseInsensitive)) {
+			line = key + " = " + value;
+			return;
+		}
+	}
+
+	// Not found -> insert into section
+	for (int i = 0; i < lines.size(); i++) {
+		QString trimmed = lines[i].trimmed();
+
+		if (trimmed.compare("[" + section + "]", Qt::CaseInsensitive) == 0) {
+			int insertPos = i + 1;
+
+			while (insertPos < lines.size()) {
+				QString current = lines[insertPos].trimmed();
+
+				if (current.startsWith('[')) { break; }
+
+				insertPos++;
+			}
+
+			lines.insert(insertPos, key + " = " + value);
+
+			return;
+		}
+	}
+}
+static void removeKey(QStringList &lines, const QString &key)
+{
+	for (int i = 0; i < lines.size(); i++) {
+		QString trimmed = lines[i].trimmed();
+
+		if (trimmed.startsWith(key + " ", Qt::CaseInsensitive) || trimmed.startsWith(key + "=", Qt::CaseInsensitive)) {
+			lines.removeAt(i);
+			return;
+		}
+	}
+}
+
+
 // SETTERS
 void ServiceController::setAllowMultipleConnections(bool value)
 {
@@ -904,7 +961,7 @@ SaveProfileResult ServiceController::saveProfileConfigWorker(QString configPath,
 		else { setOrInsertInSection(lines, "Peer", "PresharedKey", presharedKey); }
 
 	QString keepalive = config.value("PersistentKeepalive").toString();
-		if (keepalive.isEmpty() || keepalive == "0") { removeKey( lines, "PersistentKeepalive"); }
+		if (keepalive.isEmpty() || keepalive == "0") { removeKey(lines, "PersistentKeepalive"); }
 		else { setOrInsertInSection(lines, "Peer", "PersistentKeepalive", keepalive); }
 
 	// Save config
@@ -964,61 +1021,4 @@ void ServiceController::applySaveProfileResult(int row, const SaveProfileResult 
 	}
 
 	discoverProfiles();
-}
-
-
-// UTILITY HELPERS
-static void setOrInsertInSection(QStringList &lines, const QString &section, const QString &key, const QString &value)
-{
-	bool inSection = false;
-
-	for (QString &line : lines) {
-		QString trimmed = line.trimmed();
-
-		if (trimmed.compare("[" + section + "]", Qt::CaseInsensitive) == 0) {
-			inSection = true;
-			continue;
-		}
-
-		if (inSection && trimmed.startsWith('[')) { inSection = false; }
-
-		if (!inSection) { continue; }
-
-		if (trimmed.startsWith(key + " ", Qt::CaseInsensitive) || trimmed.startsWith(key + "=", Qt::CaseInsensitive)) {
-			line = key + " = " + value;
-			return;
-		}
-	}
-
-	// Not found -> insert into section
-	for (int i = 0; i < lines.size(); i++) {
-		QString trimmed = lines[i].trimmed();
-
-		if (trimmed.compare("[" + section + "]", Qt::CaseInsensitive) == 0) {
-			int insertPos = i + 1;
-
-			while (insertPos < lines.size()) {
-				QString current = lines[insertPos].trimmed();
-
-				if (current.startsWith('[')) { break; }
-
-				insertPos++;
-			}
-
-			lines.insert(insertPos, key + " = " + value);
-
-			return;
-		}
-	}
-}
-static void removeKey(QStringList &lines, const QString &key)
-{
-	for (int i = 0; i < lines.size(); i++) {
-		QString trimmed = lines[i].trimmed();
-
-		if (trimmed.startsWith(key + " ", Qt::CaseInsensitive) || trimmed.startsWith(key + "=", Qt::CaseInsensitive)) {
-			lines.removeAt(i);
-			return;
-		}
-	}
 }

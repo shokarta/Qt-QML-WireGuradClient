@@ -60,6 +60,11 @@ public:
 	// CONSTRUCTOR
     explicit ServiceController(QObject *parent = nullptr);
 
+    // UTILITY HELPERS
+    static int pingHost(const QString &host);
+    static quint64 parseSize(QString text);
+    static QString formatSpeed(quint64 bytesPerSecond);
+
 	// MODEL ACCESS
     VpnProfilesModel *profilesModel() { return &m_profilesModel; }
 
@@ -101,11 +106,6 @@ public:
 
 	// WIREGUARD CONFIGURATION
 	Q_INVOKABLE bool setWireGuardFolder(const QString &folder);
-
-	// UTILITY HELPERS
-    static int pingHost(const QString &host);
-    static quint64 parseSize(QString text);
-    static QString formatSpeed(quint64 bytesPerSecond);
 
 
 signals:
