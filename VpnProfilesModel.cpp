@@ -1,21 +1,21 @@
 #include "VpnProfilesModel.h"
 
 
+// CONSTRUCTOR
 VpnProfilesModel::VpnProfilesModel(QObject *parent) : QAbstractListModel(parent)
 {
 }
 
+
+// QAbstractListModel Overrides
 int VpnProfilesModel::rowCount(const QModelIndex &parent) const
 {
     if (parent.isValid()) { return 0; }
-
     return m_profiles.count();
 }
-
 QVariant VpnProfilesModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid()) { return {}; }
-
     if (index.row() < 0 || index.row() >= m_profiles.size()) { return {}; }
 
     const VpnProfile &profile = m_profiles[index.row()];
@@ -67,7 +67,6 @@ QVariant VpnProfilesModel::data(const QModelIndex &index, int role) const
             return {};
     }
 }
-
 QHash<int, QByteArray>VpnProfilesModel::roleNames() const
 {
     return {
@@ -94,28 +93,27 @@ QHash<int, QByteArray>VpnProfilesModel::roleNames() const
     };
 }
 
+
+// PROFILE COLLECTION
 void VpnProfilesModel::setProfiles(const QList<VpnProfile> &profiles)
 {
     beginResetModel();
-
     m_profiles = profiles;
-
     endResetModel();
 }
-
 QList<VpnProfile>&VpnProfilesModel::profiles()
 {
     return m_profiles;
 }
-
 const QList<VpnProfile>&VpnProfilesModel::profiles() const
 {
     return m_profiles;
 }
 
+
+// UI Refresh
 void VpnProfilesModel::refreshRow(int row)
 {
     if (row < 0 || row >= m_profiles.size()) { return; }
-
     emit dataChanged(index(row), index(row));
 }

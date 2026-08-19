@@ -6,34 +6,36 @@
 
 struct VpnProfile
 {
+	// IDENTITY
     QString serviceName;
     QString displayName;
-
     QString configPath;
 
+	// CONNECTION STATE
     bool connected = false;
-
     bool pendingStart = false;
     bool pendingStop = false;
+	QDateTime connectedSince;
 
+	// ENDPOINTS
     QString configuredEndpoint;
     QString currentEndpoint;
 
+	// PING MONITORING
     int currentPingMs = -1;
     QList<int> pingHistory;
     QDateTime lastHistoryPingUpdate;
 
+	// HANDSHAKE MONITORING
     qint64 lastHandshakeSeconds = -1;
-
+	
+	// TRAFFIC MONITORING
     QString downloadSpeed = "0 KB/s";
     QString uploadSpeed = "0 KB/s";
-
     quint64 lastRxBytes = 0;
     quint64 lastTxBytes = 0;
 
-    QDateTime connectedSince;
-
-
+	// FORMATTING HELPERS
     QString duration() const {
         if (!connected) { return "00:00:00"; }
 

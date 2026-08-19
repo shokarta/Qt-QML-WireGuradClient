@@ -1,18 +1,15 @@
 #include "ServiceController.h"
-#include <QFile>
-#include <QTextStream>
 
 
+// CONSTRUCTOR
 ServiceController::ServiceController(QObject *parent) : QObject(parent)
 {
 	QSettings settings;
 
 	m_allowMultipleConnections = settings.value("AllowMultipleConnections",false).toBool();
-
 	m_askDisconnectOnExit = settings.value("AskDisconnectOnExit", true).toBool();
 
 	detectWireGuard();
-
 	discoverProfiles();
 
 	connect(&m_updateTimer, &QTimer::timeout, this, &ServiceController::updateProfiles);
@@ -20,64 +17,8 @@ ServiceController::ServiceController(QObject *parent) : QObject(parent)
 	m_updateTimer.start(1000);
 }
 
-int ServiceController::pingHost(const QString &host)
-{
-	QProcess ping;
-	ping.start(
-		"ping",
-		{
-			"-n",
-			"1",
-			host
-		});
 
-	if (!ping.waitForFinished(3000)) {
-		ping.kill();
-		ping.waitForFinished();
-		return -1;
-	}
-
-	QString output = QString::fromUtf8(ping.readAllStandardOutput());
-
-	QRegularExpression re(R"((\d+)\s*ms)", QRegularExpression::CaseInsensitiveOption);
-	auto match = re.match(output);
-	if (!match.hasMatch()) { return -1; }
-
-	return match.captured(1).toInt();
-}
-
-quint64 ServiceController::parseSize(QString text)
-{
-	text.remove("received");
-	text.remove("sent");
-
-	QRegularExpression re(R"(([0-9.]+)\s*(B|KiB|MiB|GiB))");
-
-	auto match = re.match(text);
-
-	if (!match.hasMatch()) { return 0; }
-
-	double value = match.captured(1).toDouble();
-
-	QString unit = match.captured(2);
-
-	if (unit == "KiB") { value *= 1024.0; }
-	else if (unit == "MiB") { value *= 1024.0 * 1024.0; }
-	else if (unit == "GiB") { value *= 1024.0 * 1024.0 * 1024.0; }
-
-	return static_cast<quint64>(value);
-}
-
-QString ServiceController::formatSpeed(quint64 bytesPerSecond)
-{
-	double value = bytesPerSecond;
-
-	if (value >= 1024.0 * 1024.0) { return QString::number(value / (1024.0 * 1024.0), 'f', 2) + " MB/s"; }
-	if (value >= 1024.0) { return QString::number(value / 1024.0, 'f', 2) + " KB/s"; }
-
-	return QString::number(value, 'f', 0) + " B/s";
-}
-
+// SETTERS
 void ServiceController::setAllowMultipleConnections(bool value)
 {
 	if (m_allowMultipleConnections == value) { return; }
@@ -89,18 +30,6 @@ void ServiceController::setAllowMultipleConnections(bool value)
 
 	emit allowMultipleConnectionsChanged();
 }
-
-bool ServiceController::anyProfileConnected() const
-{
-	const auto &profiles = m_profilesModel.profiles();
-
-	for (const auto &profile : profiles) {
-		if (profile.connected) { return true; }
-	}
-
-	return false;
-}
-
 void ServiceController::setAskDisconnectOnExit(bool value)
 {
 	if (m_askDisconnectOnExit == value) { return; }
@@ -114,307 +43,8 @@ void ServiceController::setAskDisconnectOnExit(bool value)
 	emit askDisconnectOnExitChanged();
 }
 
-bool ServiceController::validateWireGuardFolder(const QString &path)
-{
-	QFileInfo wg(path + "/wg.exe");
-	QFileInfo wireguard(path + "/wireguard.exe");
 
-	return wg.exists() && wireguard.exists();
-}
-
-bool ServiceController::setWireGuardFolder(const QString &folder)
-{
-	if (!validateWireGuardFolder(folder)) {
-		m_wireGuardInstalled = false;
-
-		m_wireGuardPath.clear();
-
-		m_wireGuardError = "Wrong WireGuard path";
-
-		emit wireGuardInstalledChanged();
-
-		return false;
-	}
-
-	m_wireGuardPath = folder;
-
-	m_wireGuardInstalled = true;
-
-	m_wireGuardError.clear();
-
-	QSettings settings;
-		settings.setValue("WireGuardPath", folder);
-
-	emit wireGuardInstalledChanged();
-
-	return true;
-}
-
-void ServiceController::detectWireGuard()
-{
-	QSettings settings;
-
-	QString savedPath = settings.value("WireGuardPath").toString();
-
-	if (!savedPath.isEmpty() && validateWireGuardFolder(savedPath)) {
-		m_wireGuardPath = savedPath;
-		m_wireGuardInstalled = true;
-
-		m_wireGuardError.clear();
-
-		emit wireGuardInstalledChanged();
-
-		return;
-	}
-
-	QString defaultPath = R"(C:\Program Files\WireGuard)";
-
-	if (validateWireGuardFolder(defaultPath)) {
-		m_wireGuardPath = defaultPath;
-
-		m_wireGuardInstalled = true;
-
-		settings.setValue("WireGuardPath", defaultPath);
-
-		emit wireGuardInstalledChanged();
-
-		return;
-	}
-
-	QProcess process;
-
-	process.start("where", { "wg.exe" });
-
-	if (!process.waitForFinished(5000)) {
-		process.kill();
-
-		m_wireGuardInstalled = false;
-
-		m_wireGuardError = "WireGuard not installed";
-
-		emit wireGuardInstalledChanged();
-
-		return;
-	}
-
-	QString fullPath = QString::fromUtf8(process.readAllStandardOutput()).split('\n').value(0).trimmed();
-
-	if (!fullPath.isEmpty()) {
-		QFileInfo info(fullPath);
-
-		QString folder = info.absolutePath();
-
-		if (validateWireGuardFolder(folder)) {
-			m_wireGuardPath = folder;
-
-			m_wireGuardInstalled = true;
-
-			settings.setValue("WireGuardPath", folder);
-
-			emit wireGuardInstalledChanged();
-
-			return;
-		}
-	}
-
-	m_wireGuardInstalled = false;
-
-	m_wireGuardError = "WireGuard not installed";
-
-	emit wireGuardInstalledChanged();
-}
-
-QList<VpnProfile> ServiceController::discoverProfilesWorker()
-{
-	QList<VpnProfile> profiles;
-
-	QProcess process;
-	process.start(
-		"powershell",
-		{
-			"-Command",
-			"Get-Service *WireGuardTunnel* | Select-Object Name,DisplayName"
-		});
-
-	if (!process.waitForFinished(5000)) {
-		process.kill();
-		return profiles;
-	}
-
-	QString output = QString::fromUtf8(process.readAllStandardOutput());
-
-	const QStringList lines = output.split('\n');
-
-	for (const QString &line : lines) {
-		QString trimmed = line.trimmed();
-
-		if (!trimmed.startsWith("WireGuardTunnel$")) { continue; }
-
-		QStringList parts = trimmed.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-
-		if (parts.size() < 2) { continue; }
-
-		VpnProfile profile;
-			profile.serviceName = parts[0];
-			profile.displayName = parts.mid(1).join(' ');
-			profile.displayName.remove("WireGuard Tunnel: ");
-
-		// Get config path from service
-		QProcess qc;
-		qc.start(
-			"sc",
-			{
-				"qc",
-				profile.serviceName
-			});
-
-		if (qc.waitForFinished(3000)) {
-			QString qcOutput = QString::fromUtf8(qc.readAllStandardOutput());
-
-			QRegularExpression pathRegex(R"(/tunnelservice\s+([^\r\n]+\.conf))", QRegularExpression::CaseInsensitiveOption);
-
-			QRegularExpressionMatch match = pathRegex.match(qcOutput);
-
-			if (match.hasMatch()) {
-				QString configPath = match.captured(1).trimmed();
-					profile.configPath = configPath;
-
-				QFile configFile(configPath);
-				if (configFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-					QTextStream stream(&configFile);
-
-					while (!stream.atEnd()) {
-						QString configLine = stream.readLine().trimmed();
-
-						if (configLine.startsWith("Endpoint", Qt::CaseInsensitive)) {
-							profile.configuredEndpoint = configLine.section('=', 1).trimmed();
-							break;
-						}
-					}
-
-					configFile.close();
-				}
-			}
-		}
-
-		profiles.append(profile);
-	}
-
-	return profiles;
-}
-void ServiceController::discoverProfiles()
-{
-	// Do not start another discovery while one is already running.
-	if (m_discoverWatcher.isRunning()) { return; }
-
-	QFuture<QList<VpnProfile>> future = QtConcurrent::run([this]() { return discoverProfilesWorker(); });
-
-	connect(&m_discoverWatcher, &QFutureWatcher<QList<VpnProfile>>::finished, this, [this]() {
-		QList<VpnProfile> profiles = m_discoverWatcher.result();
-		m_profilesModel.setProfiles(profiles);
-	},
-	Qt::SingleShotConnection);
-
-	m_discoverWatcher.setFuture(future);
-}
-
-void ServiceController::disconnectAllProfiles()
-{
-	auto &profiles = m_profilesModel.profiles();
-
-	for (int i = 0; i < profiles.size(); i++) {
-		QProcess::startDetached(
-			"sc",
-			{
-				"stop",
-				profiles[i].serviceName
-			});
-	}
-}
-
-void ServiceController::startProfile(int row)
-{
-	auto &profiles = m_profilesModel.profiles();
-
-	if (row < 0 || row >= profiles.size()) { return; }
-
-	if (!m_allowMultipleConnections) {
-		for (int i = 0; i < profiles.size(); i++) {
-			if (i == row) { continue; }
-
-			profiles[row].pendingStart = false;
-			profiles[row].pendingStop = true;
-
-			m_profilesModel.refreshRow(row);
-
-			QProcess::startDetached(
-				"sc",
-				{
-					"stop",
-					profiles[i].serviceName
-				});
-		}
-	}
-
-	profiles[row].pendingStart = true;
-	profiles[row].pendingStop = false;
-
-	m_profilesModel.refreshRow(row);
-
-	QProcess::startDetached(
-		"sc",
-		{
-			"start",
-			profiles[row].serviceName
-		});
-}
-
-void ServiceController::stopProfile(int row)
-{
-	auto &profiles = m_profilesModel.profiles();
-
-	if (row < 0 || row >= profiles.size()) { return; }
-
-	profiles[row].pendingStop = true;
-	profiles[row].pendingStart = false;
-
-	m_profilesModel.refreshRow(row);
-
-	QProcess::startDetached(
-		"sc",
-		{
-			"stop",
-			profiles[row].serviceName
-		});
-}
-
-void ServiceController::refreshProfiles()
-{
-	discoverProfiles();
-}
-
-void ServiceController::updateProfiles()
-{
-	if (m_runtimeWatcher.isRunning()) { return; }
-
-	QStringList serviceNames;
-	const auto &profiles = m_profilesModel.profiles();
-	for (const VpnProfile &profile : profiles) { serviceNames.append(profile.serviceName); }
-
-	QString wireGuardExePath = wireGuardExe();
-	QFuture<QList<ProfileRuntimeData>> future = QtConcurrent::run([serviceNames, wireGuardExePath]() {
-		return collectRuntimeDataWorker(serviceNames, wireGuardExePath);
-	});
-
-	connect(&m_runtimeWatcher, &QFutureWatcher<QList<ProfileRuntimeData>>::finished, this, [this]() {
-			QList<ProfileRuntimeData> runtimeData = m_runtimeWatcher.result();
-			applyRuntimeData(runtimeData);
-		},
-		Qt::SingleShotConnection);
-
-	m_runtimeWatcher.setFuture(future);
-}
-
+// PROFILE ADD
 bool ServiceController::addProfile(const QVariantMap &config)
 {
 	QString profileName = config.value("ProfileName").toString().trimmed();
@@ -509,6 +139,7 @@ bool ServiceController::addProfile(const QVariantMap &config)
 }
 
 
+// PROFILE EDIT
 QVariantMap ServiceController::loadProfileConfig(int row)
 {
 	QVariantMap result;
@@ -538,61 +169,6 @@ QVariantMap ServiceController::loadProfileConfig(int row)
 	}
 
 	return result;
-}
-
-static void setOrInsertInSection(QStringList &lines, const QString &section, const QString &key, const QString &value)
-{
-	bool inSection = false;
-
-	for (QString &line : lines) {
-		QString trimmed = line.trimmed();
-
-		if (trimmed.compare("[" + section + "]", Qt::CaseInsensitive) == 0) {
-			inSection = true;
-			continue;
-		}
-
-		if (inSection && trimmed.startsWith('[')) { inSection = false; }
-
-		if (!inSection) { continue; }
-
-		if (trimmed.startsWith(key + " ", Qt::CaseInsensitive) || trimmed.startsWith(key + "=", Qt::CaseInsensitive)) {
-			line = key + " = " + value;
-			return;
-		}
-	}
-
-	// Not found -> insert into section
-	for (int i = 0; i < lines.size(); i++) {
-		QString trimmed = lines[i].trimmed();
-
-		if (trimmed.compare("[" + section + "]", Qt::CaseInsensitive) == 0) {
-			int insertPos = i + 1;
-
-			while (insertPos < lines.size()) {
-				QString current = lines[insertPos].trimmed();
-
-				if (current.startsWith('[')) { break; }
-
-				insertPos++;
-			}
-
-			lines.insert(insertPos, key + " = " + value);
-
-			return;
-		}
-	}
-}
-static void removeKey(QStringList &lines, const QString &key)
-{
-	for (int i = 0; i < lines.size(); i++) {
-		QString trimmed = lines[i].trimmed();
-
-		if (trimmed.startsWith(key + " ", Qt::CaseInsensitive) || trimmed.startsWith(key + "=", Qt::CaseInsensitive)) {
-			lines.removeAt(i);
-			return;
-		}
-	}
 }
 bool ServiceController::saveProfileConfig(int row, const QVariantMap &config)
 {
@@ -627,6 +203,8 @@ bool ServiceController::saveProfileConfig(int row, const QVariantMap &config)
 	return true;
 }
 
+
+// PROFILE DELETE
 bool ServiceController::deleteProfile(int row, bool deleteConfigFile)
 {
 	auto &profiles = m_profilesModel.profiles();
@@ -670,6 +248,372 @@ bool ServiceController::deleteProfile(int row, bool deleteConfigFile)
 }
 
 
+// PROFILE DISCOVERY
+void ServiceController::refreshProfiles()
+{
+	discoverProfiles();
+}
+
+
+// PROFILE CONNECTION CONTROL
+void ServiceController::startProfile(int row)
+{
+	auto &profiles = m_profilesModel.profiles();
+
+	if (row < 0 || row >= profiles.size()) { return; }
+
+	if (!m_allowMultipleConnections) {
+		for (int i = 0; i < profiles.size(); i++) {
+			if (i == row) { continue; }
+
+			profiles[row].pendingStart = false;
+			profiles[row].pendingStop = true;
+
+			m_profilesModel.refreshRow(row);
+
+			QProcess::startDetached(
+				"sc",
+				{
+					"stop",
+					profiles[i].serviceName
+				});
+		}
+	}
+
+	profiles[row].pendingStart = true;
+	profiles[row].pendingStop = false;
+
+	m_profilesModel.refreshRow(row);
+
+	QProcess::startDetached(
+		"sc",
+		{
+			"start",
+			profiles[row].serviceName
+		});
+}
+void ServiceController::stopProfile(int row)
+{
+	auto &profiles = m_profilesModel.profiles();
+
+	if (row < 0 || row >= profiles.size()) { return; }
+
+	profiles[row].pendingStop = true;
+	profiles[row].pendingStart = false;
+
+	m_profilesModel.refreshRow(row);
+
+	QProcess::startDetached(
+		"sc",
+		{
+			"stop",
+			profiles[row].serviceName
+		});
+}
+void ServiceController::disconnectAllProfiles()
+{
+	auto &profiles = m_profilesModel.profiles();
+
+	for (int i = 0; i < profiles.size(); i++) {
+		QProcess::startDetached(
+			"sc",
+			{
+				"stop",
+				profiles[i].serviceName
+			});
+	}
+}
+
+
+// WIREGUARD CONFIGURATION
+bool ServiceController::setWireGuardFolder(const QString &folder)
+{
+	if (!validateWireGuardFolder(folder)) {
+		m_wireGuardInstalled = false;
+
+		m_wireGuardPath.clear();
+
+		m_wireGuardError = "Wrong WireGuard path";
+
+		emit wireGuardInstalledChanged();
+
+		return false;
+	}
+
+	m_wireGuardPath = folder;
+
+	m_wireGuardInstalled = true;
+
+	m_wireGuardError.clear();
+
+	QSettings settings;
+		settings.setValue("WireGuardPath", folder);
+
+	emit wireGuardInstalledChanged();
+
+	return true;
+}
+
+
+// UTILITY HELPERS
+int ServiceController::pingHost(const QString &host)
+{
+	QProcess ping;
+	ping.start(
+		"ping",
+		{
+			"-n",
+			"1",
+			host
+		});
+
+	if (!ping.waitForFinished(3000)) {
+		ping.kill();
+		ping.waitForFinished();
+		return -1;
+	}
+
+	QString output = QString::fromUtf8(ping.readAllStandardOutput());
+
+	QRegularExpression re(R"((\d+)\s*ms)", QRegularExpression::CaseInsensitiveOption);
+	auto match = re.match(output);
+	if (!match.hasMatch()) { return -1; }
+
+	return match.captured(1).toInt();
+}
+quint64 ServiceController::parseSize(QString text)
+{
+	text.remove("received");
+	text.remove("sent");
+
+	QRegularExpression re(R"(([0-9.]+)\s*(B|KiB|MiB|GiB))");
+
+	auto match = re.match(text);
+
+	if (!match.hasMatch()) { return 0; }
+
+	double value = match.captured(1).toDouble();
+
+	QString unit = match.captured(2);
+
+	if (unit == "KiB") { value *= 1024.0; }
+	else if (unit == "MiB") { value *= 1024.0 * 1024.0; }
+	else if (unit == "GiB") { value *= 1024.0 * 1024.0 * 1024.0; }
+
+	return static_cast<quint64>(value);
+}
+QString ServiceController::formatSpeed(quint64 bytesPerSecond)
+{
+	double value = bytesPerSecond;
+
+	if (value >= 1024.0 * 1024.0) { return QString::number(value / (1024.0 * 1024.0), 'f', 2) + " MB/s"; }
+	if (value >= 1024.0) { return QString::number(value / 1024.0, 'f', 2) + " KB/s"; }
+
+	return QString::number(value, 'f', 0) + " B/s";
+}
+
+
+// WIREGUARD DETECTION
+bool ServiceController::validateWireGuardFolder(const QString &path)
+{
+	QFileInfo wg(path + "/wg.exe");
+	QFileInfo wireguard(path + "/wireguard.exe");
+
+	return wg.exists() && wireguard.exists();
+}
+void ServiceController::detectWireGuard()
+{
+	QSettings settings;
+
+	QString savedPath = settings.value("WireGuardPath").toString();
+
+	if (!savedPath.isEmpty() && validateWireGuardFolder(savedPath)) {
+		m_wireGuardPath = savedPath;
+		m_wireGuardInstalled = true;
+
+		m_wireGuardError.clear();
+
+		emit wireGuardInstalledChanged();
+
+		return;
+	}
+
+	QString defaultPath = R"(C:\Program Files\WireGuard)";
+
+	if (validateWireGuardFolder(defaultPath)) {
+		m_wireGuardPath = defaultPath;
+
+		m_wireGuardInstalled = true;
+
+		settings.setValue("WireGuardPath", defaultPath);
+
+		emit wireGuardInstalledChanged();
+
+		return;
+	}
+
+	QProcess process;
+
+	process.start("where", { "wg.exe" });
+
+	if (!process.waitForFinished(5000)) {
+		process.kill();
+
+		m_wireGuardInstalled = false;
+
+		m_wireGuardError = "WireGuard not installed";
+
+		emit wireGuardInstalledChanged();
+
+		return;
+	}
+
+	QString fullPath = QString::fromUtf8(process.readAllStandardOutput()).split('\n').value(0).trimmed();
+
+	if (!fullPath.isEmpty()) {
+		QFileInfo info(fullPath);
+
+		QString folder = info.absolutePath();
+
+		if (validateWireGuardFolder(folder)) {
+			m_wireGuardPath = folder;
+
+			m_wireGuardInstalled = true;
+
+			settings.setValue("WireGuardPath", folder);
+
+			emit wireGuardInstalledChanged();
+
+			return;
+		}
+	}
+
+	m_wireGuardInstalled = false;
+
+	m_wireGuardError = "WireGuard not installed";
+
+	emit wireGuardInstalledChanged();
+}
+
+
+// PROFILE DISCOVERY
+void ServiceController::discoverProfiles()
+{
+	// Do not start another discovery while one is already running.
+	if (m_discoverWatcher.isRunning()) { return; }
+
+	QFuture<QList<VpnProfile>> future = QtConcurrent::run([this]() { return discoverProfilesWorker(); });
+
+	connect(&m_discoverWatcher, &QFutureWatcher<QList<VpnProfile>>::finished, this, [this]() {
+		QList<VpnProfile> profiles = m_discoverWatcher.result();
+		m_profilesModel.setProfiles(profiles);
+	},
+	Qt::SingleShotConnection);
+
+	m_discoverWatcher.setFuture(future);
+}
+QList<VpnProfile> ServiceController::discoverProfilesWorker()
+{
+	QList<VpnProfile> profiles;
+
+	QProcess process;
+	process.start(
+		"powershell",
+		{
+			"-Command",
+			"Get-Service *WireGuardTunnel* | Select-Object Name,DisplayName"
+		});
+
+	if (!process.waitForFinished(5000)) {
+		process.kill();
+		return profiles;
+	}
+
+	QString output = QString::fromUtf8(process.readAllStandardOutput());
+
+	const QStringList lines = output.split('\n');
+
+	for (const QString &line : lines) {
+		QString trimmed = line.trimmed();
+
+		if (!trimmed.startsWith("WireGuardTunnel$")) { continue; }
+
+		QStringList parts = trimmed.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+
+		if (parts.size() < 2) { continue; }
+
+		VpnProfile profile;
+			profile.serviceName = parts[0];
+			profile.displayName = parts.mid(1).join(' ');
+			profile.displayName.remove("WireGuard Tunnel: ");
+
+		// Get config path from service
+		QProcess qc;
+		qc.start(
+			"sc",
+			{
+				"qc",
+				profile.serviceName
+			});
+
+		if (qc.waitForFinished(3000)) {
+			QString qcOutput = QString::fromUtf8(qc.readAllStandardOutput());
+
+			QRegularExpression pathRegex(R"(/tunnelservice\s+([^\r\n]+\.conf))", QRegularExpression::CaseInsensitiveOption);
+
+			QRegularExpressionMatch match = pathRegex.match(qcOutput);
+
+			if (match.hasMatch()) {
+				QString configPath = match.captured(1).trimmed();
+					profile.configPath = configPath;
+
+				QFile configFile(configPath);
+				if (configFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+					QTextStream stream(&configFile);
+
+					while (!stream.atEnd()) {
+						QString configLine = stream.readLine().trimmed();
+
+						if (configLine.startsWith("Endpoint", Qt::CaseInsensitive)) {
+							profile.configuredEndpoint = configLine.section('=', 1).trimmed();
+							break;
+						}
+					}
+
+					configFile.close();
+				}
+			}
+		}
+
+		profiles.append(profile);
+	}
+
+	return profiles;
+}
+
+
+// RUNTIME MONITORING
+void ServiceController::updateProfiles()
+{
+	if (m_runtimeWatcher.isRunning()) { return; }
+
+	QStringList serviceNames;
+	const auto &profiles = m_profilesModel.profiles();
+	for (const VpnProfile &profile : profiles) { serviceNames.append(profile.serviceName); }
+
+	QString wireGuardExePath = wireGuardExe();
+	QFuture<QList<ProfileRuntimeData>> future = QtConcurrent::run([serviceNames, wireGuardExePath]() {
+		return collectRuntimeDataWorker(serviceNames, wireGuardExePath);
+	});
+
+	connect(&m_runtimeWatcher, &QFutureWatcher<QList<ProfileRuntimeData>>::finished, this, [this]() {
+			QList<ProfileRuntimeData> runtimeData = m_runtimeWatcher.result();
+			applyRuntimeData(runtimeData);
+		},
+		Qt::SingleShotConnection);
+
+	m_runtimeWatcher.setFuture(future);
+}
 QList<ProfileRuntimeData>ServiceController::collectRuntimeDataWorker(const QStringList &serviceNames, const QString &wireGuardExe)
 {
 	QList<ProfileRuntimeData> result;
@@ -813,7 +757,6 @@ QList<ProfileRuntimeData>ServiceController::collectRuntimeDataWorker(const QStri
 
 	return result;
 }
-
 void ServiceController::applyRuntimeData(const QList<ProfileRuntimeData> &runtimeData)
 {
 	auto &profiles = m_profilesModel.profiles();
@@ -899,6 +842,8 @@ void ServiceController::applyRuntimeData(const QList<ProfileRuntimeData> &runtim
 	if (wasAnyConnected != nowAnyConnected) { emit anyProfileConnectedChanged(); }
 }
 
+
+// PROFILE SAVE
 SaveProfileResult ServiceController::saveProfileConfigWorker(QString configPath, QString wireGuardPath, QString serviceName, QVariantMap config)
 {
 	SaveProfileResult result;
@@ -1011,7 +956,6 @@ SaveProfileResult ServiceController::saveProfileConfigWorker(QString configPath,
 	result.success = true;
 	return result;
 }
-
 void ServiceController::applySaveProfileResult(int row, const SaveProfileResult &result)
 {
 	if (!result.success) {
@@ -1020,4 +964,61 @@ void ServiceController::applySaveProfileResult(int row, const SaveProfileResult 
 	}
 
 	discoverProfiles();
+}
+
+
+// UTILITY HELPERS
+static void setOrInsertInSection(QStringList &lines, const QString &section, const QString &key, const QString &value)
+{
+	bool inSection = false;
+
+	for (QString &line : lines) {
+		QString trimmed = line.trimmed();
+
+		if (trimmed.compare("[" + section + "]", Qt::CaseInsensitive) == 0) {
+			inSection = true;
+			continue;
+		}
+
+		if (inSection && trimmed.startsWith('[')) { inSection = false; }
+
+		if (!inSection) { continue; }
+
+		if (trimmed.startsWith(key + " ", Qt::CaseInsensitive) || trimmed.startsWith(key + "=", Qt::CaseInsensitive)) {
+			line = key + " = " + value;
+			return;
+		}
+	}
+
+	// Not found -> insert into section
+	for (int i = 0; i < lines.size(); i++) {
+		QString trimmed = lines[i].trimmed();
+
+		if (trimmed.compare("[" + section + "]", Qt::CaseInsensitive) == 0) {
+			int insertPos = i + 1;
+
+			while (insertPos < lines.size()) {
+				QString current = lines[insertPos].trimmed();
+
+				if (current.startsWith('[')) { break; }
+
+				insertPos++;
+			}
+
+			lines.insert(insertPos, key + " = " + value);
+
+			return;
+		}
+	}
+}
+static void removeKey(QStringList &lines, const QString &key)
+{
+	for (int i = 0; i < lines.size(); i++) {
+		QString trimmed = lines[i].trimmed();
+
+		if (trimmed.startsWith(key + " ", Qt::CaseInsensitive) || trimmed.startsWith(key + "=", Qt::CaseInsensitive)) {
+			lines.removeAt(i);
+			return;
+		}
+	}
 }

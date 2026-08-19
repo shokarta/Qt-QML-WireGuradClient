@@ -7,7 +7,8 @@
 #include <QRegularExpression>
 #include <QTimer>
 #include <QVariantMap>
-
+#include <QFile>
+#include <QTextStream>
 #include <QtConcurrent>
 #include <QFutureWatcher>
 
@@ -56,103 +57,104 @@ class ServiceController : public QObject
 
 public:
 
+	// CONSTRUCTOR
     explicit ServiceController(QObject *parent = nullptr);
 
+	// MODEL ACCESS
     VpnProfilesModel *profilesModel() { return &m_profilesModel; }
 
-    Q_INVOKABLE bool addProfile(const QVariantMap &config);
-
-    Q_INVOKABLE QVariantMap loadProfileConfig(int row);
-
-    Q_INVOKABLE bool saveProfileConfig(int row, const QVariantMap &config);
-
-    Q_INVOKABLE bool deleteProfile(int row, bool deleteConfigFile = false);
-
-    bool wireGuardInstalled() const { return m_wireGuardInstalled; }
-
-    QString wireGuardPath() const { return m_wireGuardPath; }
-
+	// GETTERS
+	bool wireGuardInstalled() const { return m_wireGuardInstalled; }
+	QString wireGuardPath() const { return m_wireGuardPath; }
     QString wireGuardExe() const { return m_wireGuardPath + "/wg.exe"; }
-
     QString wireGuardError() const { return m_wireGuardError; }
 
     bool allowMultipleConnections() const { return m_allowMultipleConnections; }
-
-    bool anyProfileConnected() const;
-
+    bool anyProfileConnected() const {
+		const auto &profiles = m_profilesModel.profiles();
+		for (const auto &profile : profiles) { if (profile.connected) { return true; } }
+		return false;
+	}
     bool askDisconnectOnExit() const { return m_askDisconnectOnExit; }
 
+	// SETTERS
     void setAllowMultipleConnections(bool value);
-
     void setAskDisconnectOnExit(bool value);
+	
+	// PROFILE ADD
+	Q_INVOKABLE bool addProfile(const QVariantMap &config);
+	
+	// PROFILE EDIT
+	Q_INVOKABLE QVariantMap loadProfileConfig(int row);
+    Q_INVOKABLE bool saveProfileConfig(int row, const QVariantMap &config);
+	
+	// PROFILE DELETE
+    Q_INVOKABLE bool deleteProfile(int row, bool deleteConfigFile = false);
 
-    Q_INVOKABLE bool setWireGuardFolder(const QString &folder);
-
-    Q_INVOKABLE void disconnectAllProfiles();
-
-    Q_INVOKABLE void startProfile(int row);
-
+	// PROFILE DISCOVERY
+	Q_INVOKABLE void refreshProfiles();
+	
+	// PROFILE CONNECTION CONTROL
+	Q_INVOKABLE void startProfile(int row);
     Q_INVOKABLE void stopProfile(int row);
+	Q_INVOKABLE void disconnectAllProfiles();
 
-    Q_INVOKABLE void refreshProfiles();
+	// WIREGUARD CONFIGURATION
+	Q_INVOKABLE bool setWireGuardFolder(const QString &folder);
 
+	// UTILITY HELPERS
     static int pingHost(const QString &host);
-
     static quint64 parseSize(QString text);
-
     static QString formatSpeed(quint64 bytesPerSecond);
 
 
 signals:
 
     void wireGuardInstalledChanged();
-
     void allowMultipleConnectionsChanged();
-
     void anyProfileConnectedChanged();
-
     void askDisconnectOnExitChanged();
 
 
 private:
 
+	// WIREGUARD DETECTION
     bool validateWireGuardFolder(const QString &path);
-
     void detectWireGuard();
 
+	// PROFILE DISCOVERY
     void discoverProfiles();
-
     QList<VpnProfile> discoverProfilesWorker();
 
+	// RUNTIME MONITORING
     void updateProfiles();
-
     static QList<ProfileRuntimeData> collectRuntimeDataWorker(const QStringList &serviceNames, const QString &wireGuardExe);
-
     void applyRuntimeData(const QList<ProfileRuntimeData> &runtimeData);
 
-    SaveProfileResult saveProfileConfigWorker(QString configPath, QString wireGuardPath, QString serviceName, QVariantMap config);
-
-    void applySaveProfileResult(int row, const SaveProfileResult &result);
+    // PROFILE SAVE
+	SaveProfileResult saveProfileConfigWorker(QString configPath, QString wireGuardPath, QString serviceName, QVariantMap config);
+	void applySaveProfileResult(int row, const SaveProfileResult &result);
 
 
 private:
 
+	// MODELS
     VpnProfilesModel m_profilesModel;
 
+	// WIREGUARD STATE
     QString m_wireGuardPath;
     QString m_wireGuardError;
+	bool m_wireGuardInstalled = false;
 
-    bool m_wireGuardInstalled = false;
-
+	// USER SETTINGS
     bool m_allowMultipleConnections = false;
-
+	bool m_askDisconnectOnExit = true;
+	
+	// TIMERS
     QTimer m_updateTimer;
 
-    bool m_askDisconnectOnExit = true;
-
-    QFutureWatcher<QList<VpnProfile>> m_discoverWatcher;
-
-    QFutureWatcher<QList<ProfileRuntimeData>> m_runtimeWatcher;
-
-    QFutureWatcher<SaveProfileResult> m_saveProfileWatcher;
+    // CONCURRENT WATCHERS
+	QFutureWatcher<QList<VpnProfile>> m_discoverWatcher;
+	QFutureWatcher<QList<ProfileRuntimeData>> m_runtimeWatcher;
+	QFutureWatcher<SaveProfileResult> m_saveProfileWatcher;
 };
