@@ -302,6 +302,63 @@ ApplicationWindow {
                 onClicked: addProfileDialog.open()
             }
         }
+
+    }
+
+
+    // NETWORK STATE
+    RowLayout {
+        anchors.left: parent.left;          //anchors.leftMargin: 20
+        anchors.right: parent.right;        //anchors.rightMargin: 20
+        anchors.bottom: parent.bottom;      anchors.bottomMargin: 20
+        spacing: 0
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignTop
+            spacing: 0
+
+            Text {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                font.bold: true
+                text: "🖧 LAN"
+            }
+            Text {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                font.bold: false
+                text: serviceController.lanConnected ? "Connected" : "Disconnected"
+            }
+        }
+
+        Item { Layout.fillWidth: true }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignTop
+            spacing: 0
+
+            Text {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                font.bold: true
+                text: "📶 Wi-Fi"
+            }
+            Text {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                font.bold: false
+                text: (serviceController.wifi24Ssid.length > 0 ? serviceController.wifi24Ssid : "---") + " (2.4GHz)"
+            }
+            Text {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                font.bold: false
+                color: serviceController.wifi5Ssid === "ZFOFFICE" ? "red" : "black" // ZF stuff
+                text: (serviceController.wifi5Ssid.length > 0 ? serviceController.wifi5Ssid : "---") + " (5GHz)"
+            }
+        }
     }
 
 

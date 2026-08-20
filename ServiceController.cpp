@@ -15,6 +15,8 @@ ServiceController::ServiceController(QObject *parent) : QObject(parent)
 	connect(&m_updateTimer, &QTimer::timeout, this, &ServiceController::updateProfiles);
 
 	m_updateTimer.start(1000);
+
+	updateNetworkState();
 }
 
 
@@ -654,6 +656,14 @@ void ServiceController::updateProfiles()
 {
 	if (m_runtimeWatcher.isRunning()) { return; }
 
+	// NETWORK MONITORING
+	static int networkCounter = 0;
+	if (++networkCounter >= 5) {		// every 5 seconds run network state update
+		networkCounter = 0;
+		updateNetworkState();
+	}
+
+
 	QStringList serviceNames;
 	const auto &profiles = m_profilesModel.profiles();
 	for (const VpnProfile &profile : profiles) { serviceNames.append(profile.serviceName); }
@@ -1021,4 +1031,96 @@ void ServiceController::applySaveProfileResult(int row, const SaveProfileResult 
 	}
 
 	discoverProfiles();
+}
+
+// NETWORK MONITORING
+void ServiceController::updateNetworkState()
+{
+	if (m_networkWatcher.isRunning()) { return; }
+
+	QFuture<NetworkStateData> future = QtConcurrent::run([]() {
+		return collectNetworkStateWorker();
+	});
+
+	connect(&m_networkWatcher, &QFutureWatcher<NetworkStateData>::finished, this, [this]() {
+			applyNetworkState(m_networkWatcher.result());
+		},
+		Qt::SingleShotConnection);
+
+	m_networkWatcher.setFuture(future);
+}
+NetworkStateData ServiceController::collectNetworkStateWorker()
+{
+	NetworkStateData result;
+
+	// LAN
+	QProcess lan;
+	lan.start(
+		"powershell",
+		{
+			"-Command",
+			"Get-NetAdapter "
+			"| Where-Object {$_.Status -eq 'Up'} "
+			"| Select-Object Name,InterfaceDescription"
+		});
+
+	if (!lan.waitForFinished(3000)) {
+		lan.kill();
+		lan.waitForFinished();
+	}
+	else {
+		QString output = QString::fromUtf8(lan.readAllStandardOutput());
+		result.lanConnected = output.contains("Ethernet", Qt::CaseInsensitive);
+	}
+
+	// WIFI
+	QProcess wifi;
+	wifi.start(
+		"netsh",
+		{
+			"wlan",
+			"show",
+			"interfaces"
+		});
+
+	if (!wifi.waitForFinished(3000)) {
+		wifi.kill();
+		wifi.waitForFinished();
+	}
+	else {
+		QString output = QString::fromUtf8(wifi.readAllStandardOutput());
+
+		if (output.contains("connected", Qt::CaseInsensitive)) {
+			QRegularExpression ssidRe(R"(SSID\s*:\s*(.+))");
+			QRegularExpression radioRe(R"(Radio type\s*:\s*(.+))");
+
+			auto ssidMatch = ssidRe.match(output);
+			auto radioMatch = radioRe.match(output);
+
+			QString ssid;
+			QString radio;
+
+			if (ssidMatch.hasMatch()) { ssid = ssidMatch.captured(1).trimmed(); }
+
+			if (radioMatch.hasMatch()) { radio = radioMatch.captured(1).trimmed(); }
+
+			if (!ssid.isEmpty()) {
+				if (radio.contains("802.11a", Qt::CaseInsensitive) || radio.contains("802.11ac", Qt::CaseInsensitive) || radio.contains("802.11ax", Qt::CaseInsensitive)) { result.wifi5Ssid = ssid; }
+				else { result.wifi24Ssid = ssid; }
+			}
+		}
+	}
+
+	return result;
+}
+void ServiceController::applyNetworkState(const NetworkStateData &state)
+{
+	bool changed = state.lanConnected != m_lanConnected || state.wifi24Ssid != m_wifi24Ssid || state.wifi5Ssid != m_wifi5Ssid;
+
+	m_lanConnected = state.lanConnected;
+
+	m_wifi24Ssid = state.wifi24Ssid;
+	m_wifi5Ssid = state.wifi5Ssid;
+
+	if (changed) { emit networkStateChanged(); }
 }

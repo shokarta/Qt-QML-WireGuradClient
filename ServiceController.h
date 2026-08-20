@@ -38,6 +38,12 @@ struct SaveProfileResult
     bool success = false;
     QString error;
 };
+struct NetworkStateData
+{
+    bool lanConnected = false;
+    QString wifi24Ssid;
+    QString wifi5Ssid;
+};
 
 
 class ServiceController : public QObject
@@ -53,6 +59,10 @@ class ServiceController : public QObject
     Q_PROPERTY(bool allowMultipleConnections READ allowMultipleConnections WRITE setAllowMultipleConnections NOTIFY allowMultipleConnectionsChanged)
     Q_PROPERTY(bool anyProfileConnected READ anyProfileConnected NOTIFY anyProfileConnectedChanged)
     Q_PROPERTY(bool askDisconnectOnExit READ askDisconnectOnExit WRITE setAskDisconnectOnExit NOTIFY askDisconnectOnExitChanged)
+
+    Q_PROPERTY(bool lanConnected READ lanConnected NOTIFY networkStateChanged)
+    Q_PROPERTY(QString wifi24Ssid READ wifi24Ssid NOTIFY networkStateChanged)
+    Q_PROPERTY(QString wifi5Ssid READ wifi5Ssid NOTIFY networkStateChanged)
 
 
 public:
@@ -81,6 +91,11 @@ public:
 		return false;
 	}
     bool askDisconnectOnExit() const { return m_askDisconnectOnExit; }
+
+    bool lanConnected() const { return m_lanConnected; }
+    QString wifi24Ssid() const { return m_wifi24Ssid; }
+    QString wifi5Ssid() const { return m_wifi5Ssid; }
+
 
 	// SETTERS
     void setAllowMultipleConnections(bool value);
@@ -115,6 +130,9 @@ signals:
     void anyProfileConnectedChanged();
     void askDisconnectOnExitChanged();
 
+    // NETWORK MONITORING
+    void networkStateChanged();
+
 
 private:
 
@@ -134,6 +152,11 @@ private:
     // PROFILE SAVE
 	SaveProfileResult saveProfileConfigWorker(QString configPath, QString wireGuardPath, QString serviceName, QVariantMap config);
 	void applySaveProfileResult(int row, const SaveProfileResult &result);
+
+    // NETWORK MONITORING
+    void updateNetworkState();
+    static NetworkStateData collectNetworkStateWorker();
+    void applyNetworkState(const NetworkStateData &state);
 
 
 private:
@@ -157,4 +180,10 @@ private:
 	QFutureWatcher<QList<VpnProfile>> m_discoverWatcher;
 	QFutureWatcher<QList<ProfileRuntimeData>> m_runtimeWatcher;
 	QFutureWatcher<SaveProfileResult> m_saveProfileWatcher;
+
+    // NETWORK MONITORING
+    QFutureWatcher<NetworkStateData> m_networkWatcher;
+    bool m_lanConnected = false;
+    QString m_wifi24Ssid;
+    QString m_wifi5Ssid;
 };
