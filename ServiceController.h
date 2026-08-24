@@ -41,8 +41,12 @@ struct SaveProfileResult
 struct NetworkStateData
 {
     bool lanConnected = false;
+
     QString wifi24Ssid;
     QString wifi5Ssid;
+
+    int wifi24Signal = -1;
+    int wifi5Signal = -1;
 };
 
 
@@ -62,7 +66,9 @@ class ServiceController : public QObject
 
     Q_PROPERTY(bool lanConnected READ lanConnected NOTIFY networkStateChanged)
     Q_PROPERTY(QString wifi24Ssid READ wifi24Ssid NOTIFY networkStateChanged)
+    Q_PROPERTY(int wifi24Signal READ wifi24Signal NOTIFY networkStateChanged)
     Q_PROPERTY(QString wifi5Ssid READ wifi5Ssid NOTIFY networkStateChanged)
+    Q_PROPERTY(int wifi5Signal READ wifi5Signal NOTIFY networkStateChanged)
 
 
 public:
@@ -94,7 +100,9 @@ public:
 
     bool lanConnected() const { return m_lanConnected; }
     QString wifi24Ssid() const { return m_wifi24Ssid; }
+    int wifi24Signal() const { return m_wifi24Signal; }
     QString wifi5Ssid() const { return m_wifi5Ssid; }
+    int wifi5Signal() const { return m_wifi5Signal; }
 
 
 	// SETTERS
@@ -185,5 +193,7 @@ private:
     QFutureWatcher<NetworkStateData> m_networkWatcher;
     bool m_lanConnected = false;
     QString m_wifi24Ssid;
+    int m_wifi24Signal = -1;
     QString m_wifi5Ssid;
+    int m_wifi5Signal = -1;
 };

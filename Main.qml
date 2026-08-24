@@ -4,14 +4,15 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtGraphs
 
+
 ApplicationWindow {
     id: root
     width: 400
     height: 700
     visible: true
-    title: "WireGuard VPN Client"
+    title: "WireGuard Client"
     color: "#FAFAFA"
-
+	
     property color downloadColor: "#00AA00"
     property color uploadColor: "#4A86FF"
 
@@ -24,6 +25,19 @@ ApplicationWindow {
         close.accepted = false;
         exitDialog.open();
     }
+	
+	property bool minimizeToTray: true
+    onVisibilityChanged: function() {
+        if (!root.minimizeToTray) { return; }
+
+        if (visibility === Window.Minimized) {
+            trayManager.showTray();
+            root.hide();
+            root.visibility = Window.Hidden;
+            trayManager.showMessage(1, "Application has been minimized to tray.");
+		}
+	}
+	
 
     FolderDialog {
         id: wireGuardFolderDialog
@@ -349,14 +363,13 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 font.bold: false
-                text: (serviceController.wifi24Ssid.length > 0 ? serviceController.wifi24Ssid : "---") + " (2.4GHz)"
+                text: "2.4GHz: " + (serviceController.wifi24Ssid.length > 0 ? serviceController.wifi24Ssid : "---") + (serviceController.wifi24Signal >= 0 ? " (" + serviceController.wifi24Signal + "%)" : "")
             }
             Text {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 font.bold: false
-                color: serviceController.wifi5Ssid === "ZFOFFICE" ? "red" : "black" // ZF stuff
-                text: (serviceController.wifi5Ssid.length > 0 ? serviceController.wifi5Ssid : "---") + " (5GHz)"
+                text: "5GHz: " + (serviceController.wifi5Ssid.length > 0 ? serviceController.wifi5Ssid : "---") + (serviceController.wifi5Signal >= 0 ? " (" + serviceController.wifi5Signal + "%)" : "")
             }
         }
     }

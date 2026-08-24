@@ -1,5 +1,15 @@
 #include "ServiceController.h"
 
+#include <QNetworkInterface>
+
+#ifdef Q_OS_WIN
+	#define WIN32_LEAN_AND_MEAN
+	#include <windows.h>
+	#include <wlanapi.h>
+	#include <windot11.h>
+	#pragma comment(lib, "wlanapi.lib")
+#endif
+
 
 // CONSTRUCTOR
 ServiceController::ServiceController(QObject *parent) : QObject(parent)
@@ -658,7 +668,7 @@ void ServiceController::updateProfiles()
 
 	// NETWORK MONITORING
 	static int networkCounter = 0;
-	if (++networkCounter >= 5) {		// every 5 seconds run network state update
+	if (++networkCounter >= 1) {		// every 5 seconds run network state update
 		networkCounter = 0;
 		updateNetworkState();
 	}
@@ -1054,61 +1064,93 @@ NetworkStateData ServiceController::collectNetworkStateWorker()
 	NetworkStateData result;
 
 	// LAN
-	QProcess lan;
-	lan.start(
-		"powershell",
-		{
-			"-Command",
-			"Get-NetAdapter "
-			"| Where-Object {$_.Status -eq 'Up'} "
-			"| Select-Object Name,InterfaceDescription"
-		});
+	for (const QNetworkInterface &iface : QNetworkInterface::allInterfaces()) {
+		if (!(iface.flags() & QNetworkInterface::IsUp)) { continue; }
+		if (!(iface.flags() & QNetworkInterface::IsRunning)) { continue; }
 
-	if (!lan.waitForFinished(3000)) {
-		lan.kill();
-		lan.waitForFinished();
-	}
-	else {
-		QString output = QString::fromUtf8(lan.readAllStandardOutput());
-		result.lanConnected = output.contains("Ethernet", Qt::CaseInsensitive);
+		QString humanName = iface.humanReadableName();
+
+		// Ignore virtual adapters
+		if (humanName.contains("VMware", Qt::CaseInsensitive) ||
+			humanName.contains("Virtual", Qt::CaseInsensitive) ||
+			humanName.contains("Hyper-V", Qt::CaseInsensitive) ||
+			humanName.contains("WireGuard", Qt::CaseInsensitive) ||
+			humanName.contains("TAP", Qt::CaseInsensitive) ||
+			humanName.contains("OpenVPN", Qt::CaseInsensitive))
+		{ continue; }
+
+		// Physical Ethernet only
+		if (iface.type() != QNetworkInterface::Ethernet) { continue; }
+
+		// Must have a valid address
+		bool hasRealIp = false;
+
+		for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
+			QHostAddress ip = entry.ip();
+			if (ip.protocol() == QAbstractSocket::IPv4Protocol && !ip.isLoopback()) {
+				hasRealIp = true;
+				break;
+			}
+		}
+
+		if (hasRealIp) {
+			result.lanConnected = true;
+			break;
+		}
 	}
 
 	// WIFI
-	QProcess wifi;
-	wifi.start(
-		"netsh",
-		{
-			"wlan",
-			"show",
-			"interfaces"
-		});
+	HANDLE clientHandle = nullptr;
+	DWORD negotiatedVersion = 0;
 
-	if (!wifi.waitForFinished(3000)) {
-		wifi.kill();
-		wifi.waitForFinished();
-	}
-	else {
-		QString output = QString::fromUtf8(wifi.readAllStandardOutput());
+	if (WlanOpenHandle(2, nullptr, &negotiatedVersion, &clientHandle) == ERROR_SUCCESS) {
+		PWLAN_INTERFACE_INFO_LIST interfaces = nullptr;
 
-		if (output.contains("connected", Qt::CaseInsensitive)) {
-			QRegularExpression ssidRe(R"(SSID\s*:\s*(.+))");
-			QRegularExpression radioRe(R"(Radio type\s*:\s*(.+))");
+		if (WlanEnumInterfaces(clientHandle, nullptr, &interfaces) == ERROR_SUCCESS) {
+			for (unsigned int i = 0; i < interfaces->dwNumberOfItems; i++) {
+				const WLAN_INTERFACE_INFO &iface = interfaces->InterfaceInfo[i];
 
-			auto ssidMatch = ssidRe.match(output);
-			auto radioMatch = radioRe.match(output);
+				if (iface.isState != wlan_interface_state_connected) { continue; }
 
-			QString ssid;
-			QString radio;
+				PWLAN_CONNECTION_ATTRIBUTES attrs = nullptr;
 
-			if (ssidMatch.hasMatch()) { ssid = ssidMatch.captured(1).trimmed(); }
+				DWORD dataSize = 0;
 
-			if (radioMatch.hasMatch()) { radio = radioMatch.captured(1).trimmed(); }
+				WLAN_OPCODE_VALUE_TYPE opCode;
 
-			if (!ssid.isEmpty()) {
-				if (radio.contains("802.11a", Qt::CaseInsensitive) || radio.contains("802.11ac", Qt::CaseInsensitive) || radio.contains("802.11ax", Qt::CaseInsensitive)) { result.wifi5Ssid = ssid; }
-				else { result.wifi24Ssid = ssid; }
+				if (WlanQueryInterface(clientHandle, &iface.InterfaceGuid, wlan_intf_opcode_current_connection, nullptr, &dataSize, reinterpret_cast<PVOID*>(&attrs), &opCode) != ERROR_SUCCESS) { continue; }
+
+				QString ssid = QString::fromUtf8(reinterpret_cast<const char *>(attrs->wlanAssociationAttributes.dot11Ssid.ucSSID), attrs->wlanAssociationAttributes.dot11Ssid.uSSIDLength);
+
+				ULONG signal = attrs->wlanAssociationAttributes.wlanSignalQuality;
+
+				DWORD channelNumber = 0;
+				DWORD dataSize2 = 0;
+				WLAN_OPCODE_VALUE_TYPE opCode2;
+				PVOID channelData = nullptr;
+
+				if (WlanQueryInterface(clientHandle, &iface.InterfaceGuid, wlan_intf_opcode_channel_number, nullptr, &dataSize2, &channelData, &opCode2) == ERROR_SUCCESS) {
+					channelNumber = *reinterpret_cast<DWORD*>(channelData);
+//qDebug() << "SSID:" << ssid << "Channel:" << channelNumber << "Signal:" << signal;
+					WlanFreeMemory(channelData);
+				}
+
+				if (channelNumber >= 1 && channelNumber <= 14) {		// 2.4GHz
+					result.wifi24Ssid = ssid;
+					result.wifi24Signal = static_cast<int>(signal);
+				}
+				else if (channelNumber > 14) {							// 5GHz
+					result.wifi5Ssid = ssid;
+					result.wifi5Signal = static_cast<int>(signal);
+				}
+
+				WlanFreeMemory(attrs);
 			}
+
+			WlanFreeMemory(interfaces);
 		}
+
+		WlanCloseHandle(clientHandle, nullptr);
 	}
 
 	return result;
@@ -1121,6 +1163,9 @@ void ServiceController::applyNetworkState(const NetworkStateData &state)
 
 	m_wifi24Ssid = state.wifi24Ssid;
 	m_wifi5Ssid = state.wifi5Ssid;
+
+	m_wifi24Signal = state.wifi24Signal;
+	m_wifi5Signal = state.wifi5Signal;
 
 	if (changed) { emit networkStateChanged(); }
 }

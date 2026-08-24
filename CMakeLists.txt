@@ -27,6 +27,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(QT NAMES Qt6)		# load Qt CMake Variables (ie: QT_VERSION_MAJOR etc)
 find_package(Qt6 REQUIRED COMPONENTS Quick)
 find_package(Qt6 REQUIRED COMPONENTS QuickControls2)
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(Qt6 REQUIRED COMPONENTS Gui)
 find_package(Qt6 REQUIRED COMPONENTS Network)
@@ -41,6 +42,8 @@ qt_policy(
 # Add executable or library
 qt_add_executable(${TARGET_NAME}
 	main.cpp
+	TrayManager.h
+	TrayManager.cpp
 	VpnProfile.h
 	VpnProfilesModel.h
 	VpnProfilesModel.cpp
@@ -59,6 +62,8 @@ qt_add_qml_module(${TARGET_NAME}
 
 	RESOURCES
 		# images
+		resources/app.ico
+		resources/icon.rc
 		resources/images/i_modify.svg
 		resources/images/i_settings.gif
 )
@@ -71,10 +76,12 @@ qt_add_qml_module(${TARGET_NAME}
 
 target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Quick)
 target_link_libraries(${TARGET_NAME} PRIVATE Qt6::QuickControls2)
+target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Widgets)
 target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Core)
 target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Gui)
 target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Network)
 target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Concurrent)
+target_link_libraries(${TARGET_NAME} PRIVATE wlanapi)
 
 target_compile_definitions(${TARGET_NAME} PRIVATE $<$<CONFIG:Debug>:QT_QML_DEBUG>)
 
