@@ -33,7 +33,7 @@ ApplicationWindow {
         if (visibility === Window.Minimized) {
             trayManager.showTray();
             root.hide();
-            root.visibility = Window.Hidden;
+            //root.visibility = Window.Hidden;
             trayManager.showMessage(1, "Application has been minimized to tray.");
 		}
 	}

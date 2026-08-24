@@ -2,6 +2,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QWindow>
+#include <QDebug>
 
 #include "TrayManager.h"
 #include "ServiceController.h"
@@ -13,9 +14,14 @@ int main(int argc,char *argv[])
 
     QQmlApplicationEngine engine;
 
-	auto trayManager = new TrayManager(&app);						engine.rootContext()->setContextProperty("trayManager", trayManager);
-	
+	// VPN(s) Controller
 	auto serviceController = new ServiceController(&app);			engine.rootContext()->setContextProperty("serviceController", serviceController);
+
+	// Minimize to Tray
+	auto trayManager = new TrayManager(&app);						engine.rootContext()->setContextProperty("trayManager", trayManager);
+	bool startMinimized = app.arguments().contains("-minimized", Qt::CaseInsensitive);
+	engine.rootContext()->setContextProperty("startMinimized", startMinimized);
+
 
 	const QUrl url("qrc:/wireGuardClient/Main.qml");
 	QObject::connect(
@@ -27,15 +33,18 @@ int main(int argc,char *argv[])
 	//engine.loadFromModule("wireGuardClient", "Main");
 	engine.load(url);
 	
-	
+
 	if (engine.rootObjects().isEmpty()) { return -1; }
 	auto *window = qobject_cast<QWindow*>(engine.rootObjects().constFirst());
-	bool startMinimized = app.arguments().contains("-minimized", Qt::CaseInsensitive);
+	if (startMinimized) {
+		trayManager->showTray();
+		window->hide();
+	}
+
 
 	QObject::connect(trayManager, &TrayManager::restoreRequested, &app, [&window, &trayManager, &startMinimized](){
 		trayManager->hideTray();
-		if (startMinimized) { trayManager->showTray(); }
-		else { window->show(); }
+		window->showNormal();
         window->raise();
         window->requestActivate();
     });
