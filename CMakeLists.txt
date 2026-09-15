@@ -10,7 +10,7 @@ set(MY_APP_PROJECT_NAME "WireGuardClient")
 string(TOLOWER ${MY_APP_PROJECT_NAME} MY_APP_PROJECT_NAME_URI)
 set(TARGET_NAME "wireGuardClient")
 set(PROJECT_VERSION 1.0.0)
-set(MY_APP_REVERSE_DNS_IDENTIFIER "com.sfatmt.wireguardclient")
+set(MY_APP_REVERSE_DNS_IDENTIFIER "com.sfatmt.${TARGET_NAME}")
 
 project(${MY_APP_PROJECT_NAME} VERSION ${PROJECT_VERSION})
 
@@ -51,7 +51,6 @@ qt_add_executable(${TARGET_NAME}
 	ServiceController.cpp
 )
 
-#set_source_files_properties(Main.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(${TARGET_NAME}
 	URI ${TARGET_NAME}
 	VERSION ${PROJECT_VERSION}
@@ -63,16 +62,16 @@ qt_add_qml_module(${TARGET_NAME}
 	RESOURCES
 		# images
 		resources/app.ico
-		resources/icon.rc
 		resources/images/i_modify.svg
+		resources/images/i_lan.svg
+		resources/images/i_wifi.svg
+		resources/images/i_arrowUp.svg
+		resources/images/i_arrowDown.svg
+		resources/images/i_clock.svg
+		resources/images/i_shield.svg
 		resources/images/i_settings.gif
 )
 
-
-#set_target_properties(${TARGET_NAME} PROPERTIES
-#	WIN32_EXECUTABLE TRUE
-#	#VS_GLOBAL_ApplicationManifest "${CMAKE_CURRENT_SOURCE_DIR}/app.manifest"
-#)
 
 target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Quick)
 target_link_libraries(${TARGET_NAME} PRIVATE Qt6::QuickControls2)
@@ -84,6 +83,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE Qt6::Concurrent)
 target_link_libraries(${TARGET_NAME} PRIVATE wlanapi)
 
 target_compile_definitions(${TARGET_NAME} PRIVATE $<$<CONFIG:Debug>:QT_QML_DEBUG>)
+target_compile_definitions(${TARGET_NAME} PRIVATE APP_URI="${TARGET_NAME}")		# pass URI to c++
 
 
 set_target_properties(${TARGET_NAME} PROPERTIES
@@ -114,7 +114,6 @@ install(TARGETS ${TARGET_NAME}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-#qt_generate_deploy_app_script(
 qt_generate_deploy_qml_app_script(
 	TARGET ${TARGET_NAME}
 	OUTPUT_SCRIPT deploy_script

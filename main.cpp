@@ -15,22 +15,15 @@ int main(int argc,char *argv[])
     QQmlApplicationEngine engine;
 
 	// VPN(s) Controller
-	auto serviceController = new ServiceController(&app);			engine.rootContext()->setContextProperty("serviceController", serviceController);
+	auto serviceController = new ServiceController(&app);									engine.rootContext()->setContextProperty("serviceController", serviceController);
 
 	// Minimize to Tray
-	auto trayManager = new TrayManager(&app);						engine.rootContext()->setContextProperty("trayManager", trayManager);
-	bool startMinimized = app.arguments().contains("-minimized", Qt::CaseInsensitive);
-	engine.rootContext()->setContextProperty("startMinimized", startMinimized);
+	auto trayManager = new TrayManager(&app);												engine.rootContext()->setContextProperty("trayManager", trayManager);
+	bool startMinimized = app.arguments().contains("-minimized", Qt::CaseInsensitive);		engine.rootContext()->setContextProperty("startMinimized", startMinimized);
 
 
-	const QUrl url("qrc:/wireGuardClient/Main.qml");
-	QObject::connect(
-		&engine,
-		&QQmlApplicationEngine::objectCreationFailed,
-		&app,
-		[]() { QCoreApplication::exit(-1); },
-		Qt::QueuedConnection);
-	//engine.loadFromModule("wireGuardClient", "Main");
+	const QUrl url("qrc:/" + QString(APP_URI) + "/Main.qml");
+	QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app, []() { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
 	engine.load(url);
 	
 
@@ -42,7 +35,7 @@ int main(int argc,char *argv[])
 	}
 
 
-	QObject::connect(trayManager, &TrayManager::restoreRequested, &app, [&window, &trayManager, &startMinimized](){
+	QObject::connect(trayManager, &TrayManager::restoreRequested, &app, [&window, &trayManager](){
 		trayManager->hideTray();
 		window->showNormal();
         window->raise();

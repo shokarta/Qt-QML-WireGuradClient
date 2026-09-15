@@ -1,6 +1,7 @@
 import QtQuick
-import QtQuick.Dialogs
 import QtQuick.Controls
+import QtQuick.Dialogs
+import QtQuick.Effects
 import QtQuick.Layouts
 import QtGraphs
 
@@ -11,8 +12,18 @@ ApplicationWindow {
     height: 700
     visible: true
     title: "WireGuard Client"
-    color: "#FAFAFA"
-	
+    color: bgColor
+
+    property color bgColor: "#F5F7FA"
+    property color cardColor: "#FFFFFF"
+    property color primaryColor: "#2563EB"
+    property color successColor: "#22C55E"
+    property color textColor: "#111827"
+    property color secondaryText: "#6B7280"
+    property color borderColor: "#E5E7EB"
+
+    font.family: "Inter"
+
     property color downloadColor: "#00AA00"
     property color uploadColor: "#4A86FF"
 
@@ -25,8 +36,8 @@ ApplicationWindow {
         close.accepted = false;
         exitDialog.open();
     }
-	
-	property bool minimizeToTray: true
+
+    property bool minimizeToTray: true
     onVisibilityChanged: function() {
         if (!root.minimizeToTray) { return; }
 
@@ -35,9 +46,9 @@ ApplicationWindow {
             root.hide();
             //root.visibility = Window.Hidden;
             trayManager.showMessage(1, "Application has been minimized to tray.");
-		}
-	}
-	
+        }
+    }
+
 
     FolderDialog {
         id: wireGuardFolderDialog
@@ -54,10 +65,10 @@ ApplicationWindow {
         anchors.top: parent.top;            anchors.topMargin: 15
         anchors.left: parent.left;          anchors.leftMargin: 15
         anchors.right: parent.right;        anchors.rightMargin: 15
-        spacing: 12
+        spacing: 15
 
         Text {
-            font.bold: true
+            font.weight: Font.DemiBold
             font.pixelSize: 18
             text: "WIREGUARD PROFILES"
         }
@@ -89,7 +100,7 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }        // Extra Space
 
                 Text {
-                    font.bold: true
+                    font.weight: Font.DemiBold
                     font.pixelSize: 18
                     //color: root.duarationColor
                     text: "📁"
@@ -106,270 +117,458 @@ ApplicationWindow {
         Repeater {
             model: serviceController.profilesModel
 
-            delegate: ColumnLayout {
+            delegate: Item {
                 Layout.fillWidth: true
-                spacing: 5
+                Layout.preferredHeight: delegateLayout.height
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
+                // SHADOW
+                MultiEffect {
+                    source: card
+                    anchors.fill: card
+                    shadowEnabled: true
+                    shadowColor: "black"
+                    shadowOpacity: 0.3
+                    shadowBlur: 1.0
+                    shadowVerticalOffset: 3
+                }
 
-                    Item {
-                        Layout.fillHeight: true
-                        Layout.preferredWidth: switchIndicator.width
+                Rectangle {
+                    id: card
+                    anchors.fill: parent
+                    color: root.cardColor
+                    radius: 12
+                    border.color: root.borderColor
+                    border.width: 1
+                }
 
-						Rectangle {
-							id: switchIndicator
-                            anchors.centerIn: parent
-                            width: height * 2.5
-                            height: parent.height / 2
-                            property bool active: serviceController.wireGuardInstalled
-							opacity: connectingIndicator.visible ? 0.05 : 1
-							border.width: 1
-							border.color: "black"
-                            radius: parent.height / 7.5
-							color: "white"
-							
-							Rectangle {
-								anchors.top: parent.top
-								anchors.bottom: parent.bottom
-								width: parent.width / 2
-								border.width: 1
-								border.color: "black"
-                                radius: parent.height / 7.5
-                                color: if (!switchIndicator.active) { return "lightgray"; }
-                                       else if (connected || pendingStart) { return "lightblue"; }
-                                       else { return "lightgray"; }
-                                x: connected || pendingStart ? parent.width/2 : 0
-                                Behavior on x { NumberAnimation { duration: 200 } }
-                                Behavior on color { ColorAnimation { duration: 200 } }
-							}
-						}
-						BusyIndicator {
-							id: connectingIndicator
-							anchors.centerIn: parent
-							width: parent.width
-							height: parent.height
-                            running: visible
-                            visible: pendingStart || pendingStop
-						}
-						MouseArea {
-                            anchors.fill: parent
-                            enabled: if (!switchIndicator.active) { return false; }
-                                     else if (connectingIndicator.visible) { return false; }
-                                     else { return true; }
-							onClicked: {
-                                if (connected) { serviceController.stopProfile(index); }
-                                else { serviceController.startProfile(index); }
-                            }
-						}
-                    }
+                ColumnLayout {
+                    id: delegateLayout
+                    anchors.top: parent.top;            anchors.topMargin: 15
+                    anchors.left: parent.left;          anchors.leftMargin: 15
+                    anchors.right: parent.right;        anchors.rightMargin: 15
+                    spacing: 15
 
-                    //Item { Layout.fillWidth: true }
-
-                    ColumnLayout {
+                    RowLayout {
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 0
+                        spacing: 12
 
-                        Text {
-                            font.bold: true
-                            color: "black"
-                            text: name
+                        Item {
+                            Layout.fillHeight: true
+                            Layout.preferredWidth: switchIndicator.width
+
+                            Rectangle {
+                                id: switchIndicator
+                                anchors.centerIn: parent
+                                width: height * 1.75
+                                height: parent.height / 1.5
+                                property bool active: serviceController.wireGuardInstalled
+                                opacity: connectingIndicator.visible ? 0.05 : 1
+                                radius: parent.height / 2
+                                color: if (!switchIndicator.active) { return root.secondaryText; }
+                                       else if (connected || pendingStart) { return root.primaryColor; }
+                                       else { return root.secondaryText; }
+
+                                Rectangle {
+                                    property real margin: 3
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    height: parent.height - (margin * 2)
+                                    width: height
+                                    radius: width / 2
+                                    color: "white"
+                                    x: connected || pendingStart ? (parent.width/2)-margin : 0+margin
+                                    Behavior on x { NumberAnimation { duration: 200 } }
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                }
+                            }
+                            BusyIndicator {
+                                id: connectingIndicator
+                                anchors.centerIn: parent
+                                width: parent.width
+                                height: parent.height
+                                running: visible
+                                visible: pendingStart || pendingStop
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: if (!switchIndicator.active) { return false; }
+                                         else if (connectingIndicator.visible) { return false; }
+                                         else { return true; }
+                                onClicked: {
+                                    if (connected) { serviceController.stopProfile(index); }
+                                    else { serviceController.startProfile(index); }
+                                }
+                            }
                         }
-                        Text {
-                            color: "black"
-                            text: currentEndpoint.length > 0 ? currentEndpoint : configuredEndpoint
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            spacing: 4
+
+                            Text {
+                                font.weight: Font.DemiBold
+                                font.pixelSize: 14
+                                color: root.textColor
+                                text: name
+                            }
+                            Text {
+                                color: root.secondaryText
+                                text: currentEndpoint.length > 0 ? currentEndpoint : configuredEndpoint
+                            }
                         }
-                    }
 
-                    Item { Layout.fillWidth: true }
+                        Item { Layout.fillWidth: true }
 
-                    Image {
-                        //height: parent.height * 0.6
-                        Layout.preferredHeight: parent.height * 0.6
-                        sourceSize.height: height
-                        fillMode: Image.PreserveAspectFit
-                        source: "resources/images/i_modify.svg"
-                        visible: !connected
+                        Image {
+                            //height: parent.height * 0.6
+                            Layout.preferredHeight: parent.height * 0.6
+                            sourceSize.height: height
+                            fillMode: Image.PreserveAspectFit
+                            source: "resources/images/i_modify.svg"
+                            visible: !connected
 
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: {
-                                profileEditorDialog.loadProfile(index);
-                                profileEditorDialog.open()
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: {
+                                    profileEditorDialog.loadProfile(index);
+                                    profileEditorDialog.open()
+                                }
+                            }
+                        }
+
+                        ColumnLayout {
+                            spacing: 3
+                            visible: connected
+
+                            RowLayout {
+                                Layout.alignment: Qt.AlignHCenter
+                                spacing: 5
+
+                                Rectangle {
+                                    width: 10
+                                    height: 10
+                                    color: connected ? "#13A009" : "#EB3324"
+                                    radius: height / 2
+                                }
+                                Text {
+                                    font.pixelSize: 13
+                                    font.weight: Font.DemiBold
+                                    color: connected ? "#13A009" : "#EB3324"
+                                    text: connected ? "Connected" : "Disconnected"
+                                }
+                            }
+
+                            RowLayout {
+                                spacing: 10
+
+                                Text {
+                                    id: pingData
+                                    Layout.alignment: Qt.AlignBottom
+                                    color: pingGraph.getColor(ping)
+                                    text: ping >= 0 ? (ping + " ms") : "-- ms"
+                                    visible: connected
+                                }
+                                Row {
+                                    id: pingGraph
+                                    Layout.preferredHeight: barWidth * maxHeightMultiplier
+                                    Layout.alignment: Qt.AlignBottom
+                                    spacing: 1
+                                    visible: connected
+                                    property int maxLength: 8
+                                    property int maxPing: 200
+                                    property real barWidth: 8
+                                    property real maxHeightMultiplier: 3
+
+                                    function getColor(value) {
+                                        if (value === null) { return "transparent"; }
+
+                                        value = Math.min(Math.max(value, 0), pingGraph.maxPing);
+
+                                        let t = value / pingGraph.maxPing;
+                                        let r, g, b;
+
+                                        if (t < 0.5) {      // green -> yellow
+                                            let x = t * 2;
+                                                r = Math.round(0 + (255 - 0) * x);
+                                                g = Math.round(192 + (192 - 192) * x);
+                                                b = Math.round(0 + (0 - 0) * x);
+                                        }
+                                        else {              // yellow -> red
+                                            let x = (t - 0.5) * 2;
+                                                r = Math.round(255 + (208 - 255) * x);
+                                                g = Math.round(192 + (0 - 192) * x);
+                                                b = 0;
+                                        }
+
+                                        return Qt.rgba(r/255, g/255, b/255, 1);
+                                    }
+
+                                    Repeater {
+                                        model: {
+                                            let values = pingHistory.slice(Math.max(0, pingHistory.length - pingGraph.maxLength));
+                                            while (values.length < pingGraph.maxLength) { values.unshift(null); }
+                                            return values;
+                                        }
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            anchors.bottom: parent.bottom
+                                            width: pingGraph.barWidth
+                                            height: modelData === null ? 1 : (width * pingGraph.maxHeightMultiplier * Math.min(modelData, pingGraph.maxPing) / pingGraph.maxPing);
+                                            color: pingGraph.getColor(modelData)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
 
-                    Text {
-                        id: pingData
-                        color: pingGraph.getColor(ping)
-                        text: ping >= 0 ? (ping + " ms") : "-- ms"
+                    Item { Layout.fillWidth: true; Layout.preferredHeight: 1; visible: !connected }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 1
+                        color: root.borderColor
                         visible: connected
                     }
+
                     Row {
-                        id: pingGraph
-						Layout.preferredHeight: barWidth * maxHeightMultiplier
-                        spacing: 1
-						visible: connected
-                        property int maxLength: 8
-                        property int maxPing: 200
-						property real barWidth: 8
-						property real maxHeightMultiplier: 3
-						
-						
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 30
+                        spacing: 0
+                        visible: connected
 
-                        function getColor(value) {
-                            if (value === null) { return "transparent"; }
+                        Item {
+                            width: parent.width/4
+                            height: parent.height
 
-                            value = Math.min(Math.max(value, 0), pingGraph.maxPing);
+                            RowLayout {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                spacing: 3
 
-                            let t = value / pingGraph.maxPing;
-                            let r, g, b;
-
-                            if (t < 0.5) {      // green -> yellow
-                                let x = t * 2;
-                                    r = Math.round(0 + (255 - 0) * x);
-                                    g = Math.round(192 + (192 - 192) * x);
-                                    b = Math.round(0 + (0 - 0) * x);
-                            }
-                            else {              // yellow -> red
-                                let x = (t - 0.5) * 2;
-                                    r = Math.round(255 + (208 - 255) * x);
-                                    g = Math.round(192 + (0 - 192) * x);
-                                    b = 0;
-                            }
-
-                            return Qt.rgba(r/255, g/255, b/255, 1);
-                        }
-
-                        Repeater {
-                            model: {
-                                let values = pingHistory.slice(Math.max(0, pingHistory.length - pingGraph.maxLength));
-                                while (values.length < pingGraph.maxLength) { values.unshift(null); }
-                                return values;
-                            }
-                            delegate: Rectangle {
-                                required property var modelData
-                                anchors.bottom: parent.bottom
-                                width: pingGraph.barWidth
-                                height: modelData === null ? 1 : (width * pingGraph.maxHeightMultiplier * Math.min(modelData, pingGraph.maxPing) / pingGraph.maxPing);
-                                color: pingGraph.getColor(modelData)
+                                Image {
+                                    Layout.preferredHeight: textDownload.height
+                                    sourceSize.height: height
+                                    fillMode: Image.PreserveAspectFit
+                                    source: "resources/images/i_arrowDown.svg"
+                                }
+                                Text {
+                                    id: textDownload
+                                    horizontalAlignment: Text.AlignHCenter
+                                    font.pixelSize: 12
+                                    color: root.textColor
+                                    text: downloadSpeed
+                                }
                             }
                         }
-                    }
-                }
-                Row {
-                    Layout.fillWidth: true
-                    visible: connected
 
-                    Text {
-                        //Layout.fillWidth: true
-                        //Layout.preferredWidth: parent.width/4
-                        width: parent.width/4
-                        horizontalAlignment: Text.AlignHCenter
-                        color: "black"
-                        text: "↓ " + downloadSpeed
+                        Item {
+                            width: parent.width/4
+                            height: parent.height
+
+                            RowLayout {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                spacing: 3
+
+                                Image {
+                                    Layout.preferredHeight: textUpload.height
+                                    sourceSize.height: height
+                                    fillMode: Image.PreserveAspectFit
+                                    source: "resources/images/i_arrowUp.svg"
+                                }
+                                Text {
+                                    id: textUpload
+                                    horizontalAlignment: Text.AlignHCenter
+                                    font.pixelSize: 12
+                                    color: root.textColor
+                                    text: uploadSpeed
+                                }
+                            }
+                        }
+
+                        Item {
+                            width: parent.width/4
+                            height: parent.height
+
+                            RowLayout {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                spacing: 5
+
+                                Image {
+                                    Layout.preferredHeight: textDuration.height
+                                    sourceSize.height: height
+                                    fillMode: Image.PreserveAspectFit
+                                    source: "resources/images/i_clock.svg"
+                                }
+                                Text {
+                                    id: textDuration
+                                    horizontalAlignment: Text.AlignHCenter
+                                    font.pixelSize: 12
+                                    color: root.textColor
+                                    text: duration
+                                }
+                            }
+                        }
+
+                        Item {
+                            width: parent.width/4
+                            height: parent.height
+
+                            RowLayout {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                spacing: 5
+
+                                Image {
+                                    Layout.preferredHeight: textHandshake.height
+                                    sourceSize.height: height
+                                    fillMode: Image.PreserveAspectFit
+                                    source: "resources/images/i_shield.svg"
+                                }
+                                Text {
+                                    id: textHandshake
+                                    horizontalAlignment: Text.AlignHCenter
+                                    font.pixelSize: 12
+                                    color: root.textColor
+                                    text: lastHandshake
+                                }
+                            }
+                        }
                     }
-                    //Item { Layout.fillWidth: true }     // Extra Space
-                    Text {
-                        //Layout.fillWidth: true
-                        //Layout.preferredWidth: parent.width/4
-                        width: parent.width/4
-                        horizontalAlignment: Text.AlignHCenter
-                        color: "black"
-                        text: "↑ " + uploadSpeed
-                    }
-                    //Item { Layout.fillWidth: true }     // Extra Space
-                    Text {
-                        //Layout.fillWidth: true
-                        //Layout.preferredWidth: parent.width/4
-                        width: parent.width/4
-                        horizontalAlignment: Text.AlignHCenter
-                        color: "black"
-                        text: "⏱ " + duration
-                    }
-                    //Item { Layout.fillWidth: true }     // Extra Space
-                    Text {
-                        //Layout.fillWidth: true
-                        //Layout.preferredWidth: parent.width/4
-                        width: parent.width/4
-                        horizontalAlignment: Text.AlignHCenter
-                        color: "black"
-                        text: "🤝 " + lastHandshake
-                    }
+
+                    Item { Layout.fillWidth: true; Layout.preferredHeight: 1 }
                 }
             }
         }
 
-        Text {
-            //Layout.fillWidth: true
+        Rectangle {
             Layout.alignment: Qt.AlignHCenter
-            font.pointSize: 16
-            font.bold: true
-            color: "darkgreen"
-            text: "ADD NEW PROFILE"
+            Layout.preferredHeight: addProfileText.height + 25
+            Layout.preferredWidth: addProfileText.width + 40
+            color: root.primaryColor
+            radius: height / 5
 
+            Text {
+                id: addProfileText
+                anchors.centerIn: parent
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+                color: "white"
+                text: "+ Add New Profile"
+            }
             MouseArea {
                 anchors.fill: parent
                 onClicked: addProfileDialog.open()
             }
         }
-
     }
 
 
+
+
     // NETWORK STATE
-    RowLayout {
-        anchors.left: parent.left;          //anchors.leftMargin: 20
-        anchors.right: parent.right;        //anchors.rightMargin: 20
-        anchors.bottom: parent.bottom;      anchors.bottomMargin: 20
-        spacing: 0
+    Item {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 80
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignTop
-            spacing: 0
-
-            Text {
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                font.bold: true
-                text: "🖧 LAN"
-            }
-            Text {
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                font.bold: false
-                text: serviceController.lanConnected ? "Connected" : "Disconnected"
-            }
+        Rectangle {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 1
+            color: root.borderColor
+        }
+        Rectangle {
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left;          anchors.leftMargin: parent.width * 0.4
+            width: 1
+            color: root.borderColor
         }
 
-        Item { Layout.fillWidth: true }
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignTop
+        RowLayout {
+            anchors.fill: parent
             spacing: 0
 
-            Text {
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                font.bold: true
-                text: "📶 Wi-Fi"
+            Item {
+                Layout.preferredWidth: parent.width * 0.4
+                Layout.fillHeight: true
+
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 10
+
+                    Image {
+                        Layout.preferredHeight: parent.height * 0.6
+                        sourceSize.height: height
+                        fillMode: Image.PreserveAspectFit
+                        source: "resources/images/i_lan.svg"
+                    }
+
+                    ColumnLayout {
+                        Layout.fillHeight: true
+                        spacing: 0
+
+                        Text {
+                            Layout.fillWidth: true
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
+                            color: root.textColor
+                            text: "LAN"
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            font.pixelSize: 12
+                            font.bold: false
+                            color: root.secondaryText
+                            text: serviceController.lanConnected ? "Connected" : "Disconnected"
+                        }
+                    }
+                }
             }
-            Text {
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                font.bold: false
-                text: "2.4GHz: " + (serviceController.wifi24Ssid.length > 0 ? serviceController.wifi24Ssid : "---") + (serviceController.wifi24Signal >= 0 ? " (" + serviceController.wifi24Signal + "%)" : "")
-            }
-            Text {
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                font.bold: false
-                text: "5GHz: " + (serviceController.wifi5Ssid.length > 0 ? serviceController.wifi5Ssid : "---") + (serviceController.wifi5Signal >= 0 ? " (" + serviceController.wifi5Signal + "%)" : "")
+
+            Item {
+                Layout.preferredWidth: parent.width * 0.6
+                Layout.fillHeight: true
+
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 10
+
+                    Image {
+                        Layout.preferredHeight: parent.height * 0.6
+                        sourceSize.height: height
+                        fillMode: Image.PreserveAspectFit
+                        source: "resources/images/i_wifi.svg"
+                    }
+
+                    ColumnLayout {
+                        Layout.fillHeight: true
+                        spacing: 0
+
+                        Text {
+                            Layout.fillWidth: true
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
+                            color: root.textColor
+                            text: "Wi-Fi"
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            font.pixelSize: 12
+                            font.bold: false
+                            color: root.secondaryText
+                            text: "2.4GHz: " + (serviceController.wifi24Ssid.length > 0 ? serviceController.wifi24Ssid : "---") + (serviceController.wifi24Signal >= 0 ? " (" + serviceController.wifi24Signal + "%)" : "")
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            font.pixelSize: 12
+                            font.bold: false
+                            color: root.secondaryText
+                            text: "5GHz: " + (serviceController.wifi5Ssid.length > 0 ? serviceController.wifi5Ssid : "---") + (serviceController.wifi5Signal >= 0 ? " (" + serviceController.wifi5Signal + "%)" : "")
+                        }
+                    }
+                }
             }
         }
     }
@@ -392,6 +591,12 @@ ApplicationWindow {
 
         function isValid() { return newProfileNameField.text.trim().length > 0 && newConfigPathField.text.trim().length > 0 && newPrivateKeyField.text.trim().length > 0 && newPublicKeyField.text.trim().length > 0 && addressValid && endpointValid && allowedIpsValid; }
 
+        background: Rectangle {
+            color: "white"
+            radius: 12
+            border.color: root.borderColor
+        }
+
         ScrollView {
             anchors.fill: parent
 
@@ -401,7 +606,7 @@ ApplicationWindow {
 
                 Label {
                     text: "Profile"
-                    font.bold: true
+                    font.weight: Font.DemiBold
                 }
 
                 TextField {
@@ -427,7 +632,7 @@ ApplicationWindow {
 
                 Label {
                     text: "Interface"
-                    font.bold: true
+                    font.weight: Font.DemiBold
                 }
 
                 TextField {
@@ -460,7 +665,7 @@ ApplicationWindow {
 
                 Label {
                     text: "Peer"
-                    font.bold: true
+                    font.weight: Font.DemiBold
                 }
 
                 TextArea {
@@ -567,6 +772,12 @@ ApplicationWindow {
         function isValid() { return privateKeyField.text.trim().length > 0 && publicKeyField.text.trim().length > 0 && addressValid && endpointValid && allowedIpsValid;  }
         property color invalidColor: "#CC0000"
 
+        background: Rectangle {
+            color: "white"
+            radius: 12
+            border.color: root.borderColor
+        }
+
         function loadProfile(row) {
             profileIndex = row;
             let cfg = serviceController.loadProfileConfig(row);
@@ -594,7 +805,7 @@ ApplicationWindow {
                 // Interface
                 Label {
                     text: "Interface"
-                    font.bold: true
+                    font.weight: Font.DemiBold
                 }
 
                 TextField {
@@ -628,7 +839,7 @@ ApplicationWindow {
                 // Peer
                 Label {
                     text: "Peer"
-                    font.bold: true
+                    font.weight: Font.DemiBold
                 }
 
                 TextArea {
@@ -737,6 +948,12 @@ ApplicationWindow {
         property int profileIndex: -1
         title: "Delete Profile"
 
+        background: Rectangle {
+            color: "white"
+            radius: 12
+            border.color: root.borderColor
+        }
+
         ColumnLayout {
             id: deleteFormLayout
 
@@ -792,6 +1009,12 @@ ApplicationWindow {
         anchors.centerIn: parent
         modal: true
         title: "Exit Application"
+
+        background: Rectangle {
+            color: "white"
+            radius: 12
+            border.color: root.borderColor
+        }
 
         ColumnLayout {
             spacing: 10
