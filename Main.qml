@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Dialogs
 import QtQuick.Effects
 import QtQuick.Layouts
@@ -16,6 +16,7 @@ ApplicationWindow {
 
     property color bgColor: "#F5F7FA"
     property color cardColor: "#FFFFFF"
+    property color cardColorConnected: "#EEFFF0"
     property color primaryColor: "#2563EB"
     property color successColor: "#22C55E"
     property color textColor: "#111827"
@@ -135,7 +136,7 @@ ApplicationWindow {
                 Rectangle {
                     id: card
                     anchors.fill: parent
-                    color: root.cardColor
+                    color: connected ? root.cardColorConnected : root.cardColor
                     radius: 12
                     border.color: root.borderColor
                     border.width: 1
@@ -156,28 +157,32 @@ ApplicationWindow {
                             Layout.fillHeight: true
                             Layout.preferredWidth: switchIndicator.width
 
-                            Rectangle {
+                            Switch {
                                 id: switchIndicator
                                 anchors.centerIn: parent
                                 width: height * 1.75
                                 height: parent.height / 1.5
-                                property bool active: serviceController.wireGuardInstalled
+                                checked: serviceController.wireGuardInstalled
+                                checkable: false
                                 opacity: connectingIndicator.visible ? 0.05 : 1
-                                radius: parent.height / 2
-                                color: if (!switchIndicator.active) { return root.secondaryText; }
-                                       else if (connected || pendingStart) { return root.primaryColor; }
-                                       else { return root.secondaryText; }
+                                property bool active: serviceController.wireGuardInstalled
 
-                                Rectangle {
-                                    property real margin: 3
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    height: parent.height - (margin * 2)
-                                    width: height
-                                    radius: width / 2
-                                    color: "white"
-                                    x: connected || pendingStart ? (parent.width/2)-margin : 0+margin
-                                    Behavior on x { NumberAnimation { duration: 200 } }
-                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                indicator: Rectangle {
+                                    anchors.fill: parent
+                                    radius: height / 2
+                                    color: if (!switchIndicator.active) { return root.secondaryText; }
+                                           else if (connected || pendingStart) { return root.primaryColor; }
+                                           else { return root.secondaryText; }
+
+                                    Rectangle {
+                                        height: parent.height
+                                        width: height
+                                        radius: height / 2
+                                        x: connected || pendingStart ? parent.width - width : 0
+                                        color: "white"
+                                        border.width: height / 15
+                                        border.color: parent.color
+                                    }
                                 }
                             }
                             BusyIndicator {
@@ -236,86 +241,64 @@ ApplicationWindow {
                             }
                         }
 
-                        ColumnLayout {
-                            spacing: 3
+                        RowLayout {
+                            spacing: 10
                             visible: connected
 
-                            RowLayout {
-                                Layout.alignment: Qt.AlignHCenter
-                                spacing: 5
-
-                                Rectangle {
-                                    width: 10
-                                    height: 10
-                                    color: connected ? "#13A009" : "#EB3324"
-                                    radius: height / 2
-                                }
-                                Text {
-                                    font.pixelSize: 13
-                                    font.weight: Font.DemiBold
-                                    color: connected ? "#13A009" : "#EB3324"
-                                    text: connected ? "Connected" : "Disconnected"
-                                }
+                            Text {
+                                id: pingData
+                                Layout.alignment: Qt.AlignBottom
+                                color: pingGraph.getColor(ping)
+                                text: ping >= 0 ? (ping + " ms") : "-- ms"
+                                visible: connected
                             }
+                            Row {
+                                id: pingGraph
+                                Layout.preferredHeight: barWidth * maxHeightMultiplier
+                                Layout.alignment: Qt.AlignBottom
+                                spacing: 1
+                                visible: connected
+                                property int maxLength: 8
+                                property int maxPing: 200
+                                property real barWidth: 8
+                                property real maxHeightMultiplier: 3
 
-                            RowLayout {
-                                spacing: 10
+                                function getColor(value) {
+                                    if (value === null) { return "transparent"; }
 
-                                Text {
-                                    id: pingData
-                                    Layout.alignment: Qt.AlignBottom
-                                    color: pingGraph.getColor(ping)
-                                    text: ping >= 0 ? (ping + " ms") : "-- ms"
-                                    visible: connected
-                                }
-                                Row {
-                                    id: pingGraph
-                                    Layout.preferredHeight: barWidth * maxHeightMultiplier
-                                    Layout.alignment: Qt.AlignBottom
-                                    spacing: 1
-                                    visible: connected
-                                    property int maxLength: 8
-                                    property int maxPing: 200
-                                    property real barWidth: 8
-                                    property real maxHeightMultiplier: 3
+                                    value = Math.min(Math.max(value, 0), pingGraph.maxPing);
 
-                                    function getColor(value) {
-                                        if (value === null) { return "transparent"; }
+                                    let t = value / pingGraph.maxPing;
+                                    let r, g, b;
 
-                                        value = Math.min(Math.max(value, 0), pingGraph.maxPing);
-
-                                        let t = value / pingGraph.maxPing;
-                                        let r, g, b;
-
-                                        if (t < 0.5) {      // green -> yellow
-                                            let x = t * 2;
-                                                r = Math.round(0 + (255 - 0) * x);
-                                                g = Math.round(192 + (192 - 192) * x);
-                                                b = Math.round(0 + (0 - 0) * x);
-                                        }
-                                        else {              // yellow -> red
-                                            let x = (t - 0.5) * 2;
-                                                r = Math.round(255 + (208 - 255) * x);
-                                                g = Math.round(192 + (0 - 192) * x);
-                                                b = 0;
-                                        }
-
-                                        return Qt.rgba(r/255, g/255, b/255, 1);
+                                    if (t < 0.5) {      // green -> yellow
+                                        let x = t * 2;
+                                            r = Math.round(0 + (255 - 0) * x);
+                                            g = Math.round(192 + (192 - 192) * x);
+                                            b = Math.round(0 + (0 - 0) * x);
+                                    }
+                                    else {              // yellow -> red
+                                        let x = (t - 0.5) * 2;
+                                            r = Math.round(255 + (208 - 255) * x);
+                                            g = Math.round(192 + (0 - 192) * x);
+                                            b = 0;
                                     }
 
-                                    Repeater {
-                                        model: {
-                                            let values = pingHistory.slice(Math.max(0, pingHistory.length - pingGraph.maxLength));
-                                            while (values.length < pingGraph.maxLength) { values.unshift(null); }
-                                            return values;
-                                        }
-                                        delegate: Rectangle {
-                                            required property var modelData
-                                            anchors.bottom: parent.bottom
-                                            width: pingGraph.barWidth
-                                            height: modelData === null ? 1 : (width * pingGraph.maxHeightMultiplier * Math.min(modelData, pingGraph.maxPing) / pingGraph.maxPing);
-                                            color: pingGraph.getColor(modelData)
-                                        }
+                                    return Qt.rgba(r/255, g/255, b/255, 1);
+                                }
+
+                                Repeater {
+                                    model: {
+                                        let values = pingHistory.slice(Math.max(0, pingHistory.length - pingGraph.maxLength));
+                                        while (values.length < pingGraph.maxLength) { values.unshift(null); }
+                                        return values;
+                                    }
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        anchors.bottom: parent.bottom
+                                        width: pingGraph.barWidth
+                                        height: modelData === null ? 1 : (width * pingGraph.maxHeightMultiplier * Math.min(modelData, pingGraph.maxPing) / pingGraph.maxPing);
+                                        color: pingGraph.getColor(modelData)
                                     }
                                 }
                             }
@@ -558,14 +541,14 @@ ApplicationWindow {
                             font.pixelSize: 12
                             font.bold: false
                             color: root.secondaryText
-                            text: "2.4GHz: " + (serviceController.wifi24Ssid.length > 0 ? serviceController.wifi24Ssid : "---") + (serviceController.wifi24Signal >= 0 ? " (" + serviceController.wifi24Signal + "%)" : "")
+                            text: "2.4GHz: " + (serviceController.wifi24Ssid.length > 0 ? serviceController.wifi24Ssid : "-----") + (serviceController.wifi24Signal >= 0 ? " (" + serviceController.wifi24Signal + "%)" : "")
                         }
                         Text {
                             Layout.fillWidth: true
                             font.pixelSize: 12
                             font.bold: false
                             color: root.secondaryText
-                            text: "5GHz: " + (serviceController.wifi5Ssid.length > 0 ? serviceController.wifi5Ssid : "---") + (serviceController.wifi5Signal >= 0 ? " (" + serviceController.wifi5Signal + "%)" : "")
+                            text: "5GHz: " + (serviceController.wifi5Ssid.length > 0 ? serviceController.wifi5Ssid : "-----") + (serviceController.wifi5Signal >= 0 ? " (" + serviceController.wifi5Signal + "%)" : "")
                         }
                     }
                 }
