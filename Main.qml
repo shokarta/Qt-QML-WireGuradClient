@@ -22,6 +22,8 @@ ApplicationWindow {
     property color textColor: "#111827"
     property color secondaryText: "#6B7280"
     property color borderColor: "#E5E7EB"
+    property color popupColor: "#F5F7F9"
+    property color buttonColor: "#E8EAF3"
 
     font.family: "Inter"
 
@@ -566,8 +568,8 @@ ApplicationWindow {
         modal: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: Math.min(root.width * 0.9, 700)
-        height: Math.min(root.height * 0.9, 800)
-        title: "Add New VPN Profile"
+        height: Math.min(root.height * 0.85, 750)
+
         property bool addressValid: /^.+\/\d+$/.test(newAddressField.text.trim())
         property bool endpointValid: newEndpointField.text.trim().length > 3 && newEndpointField.text.includes(":")
         property bool allowedIpsValid: newAllowedIpsField.text.trim().length > 0
@@ -575,20 +577,63 @@ ApplicationWindow {
         function isValid() { return newProfileNameField.text.trim().length > 0 && newConfigPathField.text.trim().length > 0 && newPrivateKeyField.text.trim().length > 0 && newPublicKeyField.text.trim().length > 0 && addressValid && endpointValid && allowedIpsValid; }
 
         background: Rectangle {
-            color: "white"
-            radius: 12
+            color: root.popupColor
+            radius: 15
             border.color: root.borderColor
         }
 
-        ScrollView {
+        Flickable {
             anchors.fill: parent
+            contentHeight: addFormLayouut.height
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
+            clip: true
+        //    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+        //    ScrollBar.vertical.policy: ScrollBar.AlwaysOff
 
             ColumnLayout {
-                width: addProfileDialog.width - 50
-                spacing: 10
+                id: addFormLayouut
+                anchors.top: parent.top;            //anchors.topMargin: 15
+                anchors.left: parent.left;          anchors.leftMargin: 20
+                anchors.right: parent.right;        anchors.rightMargin: 20
+                spacing: 0
 
-                Label {
-                    text: "Profile"
+                Image {
+                    Layout.alignment: Qt.AlignRight
+                    //height: 20
+                    Layout.preferredHeight: 20
+                    sourceSize.height: height
+                    fillMode: Image.PreserveAspectFit
+                    source: "resources/images/i_cross.svg"
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: addProfileDialog.close()
+                    }
+                }
+
+                // Rectangle {
+                //     Layout.alignment: Qt.AlignHCenter
+                //     Layout.preferredHeight: 80
+                //     Layout.preferredWidth: 80
+                //     color: "#F7E2E1"
+                //     radius: width
+
+                //        Text {
+                //            anchors.centerIn: parent
+                //            color: "#ED1A2B"
+                //            font.pixelSize: parent.height / 1.5
+                //            font.weight: Font.Black
+                //            text: "!"
+                //        }
+                // }
+
+                Item { Layout.preferredHeight: 10; Layout.fillWidth: true; }     // Space
+
+                // Profile
+                Text {
+                    text: "PROFILE"
+                    font.pixelSize: 15
                     font.weight: Font.DemiBold
                 }
 
@@ -596,25 +641,82 @@ ApplicationWindow {
                     id: newProfileNameField
                     Layout.fillWidth: true
                     placeholderText: "Profile Name"
+                    palette.base: addProfileDialog.addressValid ? "white" : "#FFEAEA"
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: newProfileNameField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
+
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
 
                 RowLayout {
                     Layout.fillWidth: true
+                    spacing: 10
 
                     TextField {
                         id: newConfigPathField
                         Layout.fillWidth: true
-                        placeholderText: "C:\\VPN\\MyVPN.conf"
+                        placeholderText: "Configuration File"
+                        background: Rectangle {
+                            implicitWidth: parent.width
+                            implicitHeight: 40
+                            color: root.cardColor
+                            radius: height / 7.5
+                            border.width: 1
+                            border.color: newConfigPathField.activeFocus ? root.primaryColor : root.borderColor
+                        }
+
+                        Text {
+                            anchors.top: parent.top;            anchors.topMargin: 1
+                            anchors.right: parent.right;        anchors.rightMargin: 8
+                            text: parent.placeholderText
+                            font.pixelSize: 10
+                            color: parent.placeholderTextColor
+                            visible: parent.text.trim().length > 0
+                        }
                     }
 
-                    Button {
-                        text: "Browse..."
-                        onClicked: addProfileFileDialog.open()
+                    Rectangle {
+                        Layout.fillHeight: true
+                        Layout.preferredWidth: browseButtonText.width + 25
+                        color: root.primaryColor
+                        radius: height / 5
+
+                        Text {
+                            id: browseButtonText
+                            anchors.centerIn: parent
+                            font.pixelSize: 16
+                            font.weight: Font.DemiBold
+                            color: "white"
+                            text: "Browse..."
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: addProfileFileDialog.open()
+                        }
                     }
                 }
 
-                Label {
-                    text: "Interface"
+                Item { Layout.preferredHeight: 10; Layout.fillWidth: true; }     // Space
+
+                // Interface
+                Text {
+                    text: "INTERFACE"
+                    font.pixelSize: 15
                     font.weight: Font.DemiBold
                 }
 
@@ -623,68 +725,223 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     placeholderText: "Address"
                     palette.base: addProfileDialog.addressValid ? "white" : "#FFEAEA"
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: newAddressField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
+
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
 
                 TextField {
                     id: newDnsField
                     Layout.fillWidth: true
                     placeholderText: "DNS"
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: newDnsField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
+
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
 
                 TextField {
                     id: newListenPortField
                     Layout.fillWidth: true
                     placeholderText: "ListenPort"
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: newListenPortField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
 
-                TextArea {
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
+
+                TextField {
                     id: newPrivateKeyField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 80
-                    wrapMode: Text.WrapAnywhere
                     placeholderText: "PrivateKey"
+                    wrapMode: Text.WrapAnywhere
                     palette.base: newPrivateKeyField.text.trim().length > 0 ? "white" : "#FFEAEA"
+                    font.pixelSize: 11
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: newPrivateKeyField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
 
-                Label {
-                    text: "Peer"
+                Item { Layout.preferredHeight: 12; Layout.fillWidth: true; }     // Space
+
+                // Peer
+                Text {
+                    text: "PEER"
+                    font.pixelSize: 15
                     font.weight: Font.DemiBold
                 }
 
-                TextArea {
+                TextField {
                     id: newPublicKeyField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 70
-                    wrapMode: Text.WrapAnywhere
                     placeholderText: "PublicKey"
+                    wrapMode: Text.WrapAnywhere
                     palette.base: newPublicKeyField.text.trim().length > 0 ? "white" : "#FFEAEA"
+                    font.pixelSize: 11
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: newPublicKeyField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
 
-                TextArea {
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
+
+                TextField {
                     id: newPresharedKeyField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 70
-                    wrapMode: Text.WrapAnywhere
                     placeholderText: "PresharedKey"
+                    wrapMode: Text.WrapAnywhere
+                    font.pixelSize: 11
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: newPresharedKeyField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
+
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
 
                 TextField {
                     id: newEndpointField
                     Layout.fillWidth: true
                     placeholderText: "Endpoint"
                     palette.base: addProfileDialog.endpointValid ? "white" : "#FFEAEA"
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: newEndpointField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
+
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
 
                 TextField {
                     id: newAllowedIpsField
                     Layout.fillWidth: true
                     placeholderText: "AllowedIPs"
                     palette.base: addProfileDialog.allowedIpsValid ? "white" : "#FFEAEA"
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: newAllowedIpsField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
 
-                RowLayout {
+                Item { Layout.preferredHeight: 10; Layout.fillWidth: true; }     // Space
 
-                    Label {
+                RowLayout {
+                    spacing: 12
+
+                    Text {
                         text: "Persistent Keepalive"
                     }
 
@@ -696,25 +953,25 @@ ApplicationWindow {
                     }
                 }
 
-                Item {
-                    Layout.fillHeight: true
-                }
+                Item { Layout.preferredHeight: 10; Layout.fillWidth: true; }     // Space
 
-                RowLayout {
+                Rectangle {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredHeight: profileAddCreateText.height + 25
                     Layout.fillWidth: true
+                    color: root.primaryColor
+                    radius: height / 5
 
-                    Item {
-                        Layout.fillWidth: true
+                    Text {
+                        id: profileAddCreateText
+                        anchors.centerIn: parent
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
+                        color: "white"
+                        text: "Create"
                     }
-
-                    Button {
-                        text: " Cancel "
-                        onClicked: addProfileDialog.close()
-                    }
-
-                    Button {
-                        text: " Create "
-                        enabled: addProfileDialog.isValid()
+                    MouseArea {
+                        anchors.fill: parent
                         onClicked: {
                             if (!addProfileDialog.isValid()) { return; }
 
@@ -734,6 +991,29 @@ ApplicationWindow {
                         }
                     }
                 }
+
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
+
+                Rectangle {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredHeight: profileAddCancelText.height + 25
+                    Layout.fillWidth: true
+                    color: root.buttonColor
+                    radius: height / 5
+
+                    Text {
+                        id: profileAddCancelText
+                        anchors.centerIn: parent
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
+                        color: root.textColor
+                        text: "Cancel"
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: addProfileDialog.close()
+                    }
+                }
             }
         }
     }
@@ -746,18 +1026,17 @@ ApplicationWindow {
         width: Math.min(root.width * 0.9, 700)
         height: Math.min(root.height * 0.85, 750)
         property int profileIndex: -1
-        title: "Edit VPN Profile"
 
         property bool addressValid: /^.+\/\d+$/.test(addressField.text.trim())
         property bool endpointValid: endpointField.text.includes(":")
         property bool allowedIpsValid: allowedIpsField.text.trim().length > 0
 
-        function isValid() { return privateKeyField.text.trim().length > 0 && publicKeyField.text.trim().length > 0 && addressValid && endpointValid && allowedIpsValid;  }
+        function isValid() { return privateKeyField.text.trim().length > 0 && publicKeyField.text.trim().length > 0 && addressValid && endpointValid && allowedIpsValid; }
         property color invalidColor: "#CC0000"
 
         background: Rectangle {
-            color: "white"
-            radius: 12
+            color: root.popupColor
+            radius: 15
             border.color: root.borderColor
         }
 
@@ -776,18 +1055,58 @@ ApplicationWindow {
             keepaliveField.value = Number(cfg["PersistentKeepalive"] || 0);
         }
 
-        ScrollView {
+        Flickable {
             anchors.fill: parent
+            contentHeight: editFormLayouut.height
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
+            clip: true
+        //    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+        //    ScrollBar.vertical.policy: ScrollBar.AlwaysOff
 
             ColumnLayout {
                 id: editFormLayouut
-                width: profileEditorDialog.width - 50
+                anchors.top: parent.top;            //anchors.topMargin: 15
+                anchors.left: parent.left;          anchors.leftMargin: 20
+                anchors.right: parent.right;        anchors.rightMargin: 20
+                spacing: 0
 
-                spacing: 10
+                Image {
+                    Layout.alignment: Qt.AlignRight
+                    //height: 20
+                    Layout.preferredHeight: 20
+                    sourceSize.height: height
+                    fillMode: Image.PreserveAspectFit
+                    source: "resources/images/i_cross.svg"
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: profileEditorDialog.close()
+                    }
+                }
+
+                // Rectangle {
+                //     Layout.alignment: Qt.AlignHCenter
+                //     Layout.preferredHeight: 80
+                //     Layout.preferredWidth: 80
+                //     color: "#F7E2E1"
+                //     radius: width
+
+                //        Text {
+                //            anchors.centerIn: parent
+                //            color: "#ED1A2B"
+                //            font.pixelSize: parent.height / 1.5
+                //            font.weight: Font.Black
+                //            text: "!"
+                //        }
+                // }
+
+                Item { Layout.preferredHeight: 10; Layout.fillWidth: true; }     // Space
 
                 // Interface
-                Label {
-                    text: "Interface"
+                Text {
+                    text: "INTERFACE"
+                    font.pixelSize: 15
                     font.weight: Font.DemiBold
                 }
 
@@ -796,69 +1115,223 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     placeholderText: "Address"
                     palette.base: profileEditorDialog.addressValid ? "white" : "#FFEAEA"
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: addressField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
+
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
 
                 TextField {
                     id: dnsField
                     Layout.fillWidth: true
                     placeholderText: "DNS"
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: dnsField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
+
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
 
                 TextField {
                     id: listenPortField
                     Layout.fillWidth: true
                     placeholderText: "ListenPort"
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: listenPortField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
 
-                TextArea {
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
+
+                TextField {
                     id: privateKeyField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 80
-                    wrapMode: Text.WrapAnywhere
                     placeholderText: "PrivateKey"
+                    wrapMode: Text.WrapAnywhere
                     palette.base: privateKeyField.text.trim().length > 0 ? "#C0C0C0" : "red"
+                    font.pixelSize: 11
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: privateKeyField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
 
+                Item { Layout.preferredHeight: 12; Layout.fillWidth: true; }     // Space
+
                 // Peer
-                Label {
-                    text: "Peer"
+                Text {
+                    text: "PEER"
+                    font.pixelSize: 15
                     font.weight: Font.DemiBold
                 }
 
-                TextArea {
+                TextField {
                     id: publicKeyField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 70
-                    wrapMode: Text.WrapAnywhere
                     placeholderText: "PublicKey"
+                    wrapMode: Text.WrapAnywhere
                     palette.base: publicKeyField.text.trim().length > 0 ? "#C0C0C0" : "red"
+                    font.pixelSize: 11
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: publicKeyField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
 
-                TextArea {
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
+
+                TextField {
                     id: presharedKeyField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 70
-                    wrapMode: Text.WrapAnywhere
                     placeholderText: "PresharedKey"
+                    wrapMode: Text.WrapAnywhere
+                    font.pixelSize: 11
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: presharedKeyField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
+
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
 
                 TextField {
                     id: endpointField
                     Layout.fillWidth: true
                     placeholderText: "Endpoint"
                     palette.base: profileEditorDialog.endpointValid ? "white" : "#FFEAEA"
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: endpointField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
+
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
 
                 TextField {
                     id: allowedIpsField
                     Layout.fillWidth: true
                     placeholderText: "AllowedIPs"
                     palette.base: profileEditorDialog.allowedIpsValid ? "white" : "#FFEAEA"
+                    background: Rectangle {
+                        implicitWidth: parent.width
+                        implicitHeight: 40
+                        color: root.cardColor
+                        radius: height / 7.5
+                        border.width: 1
+                        border.color: allowedIpsField.activeFocus ? root.primaryColor : root.borderColor
+                    }
+
+                    Text {
+                        anchors.top: parent.top;            anchors.topMargin: 1
+                        anchors.right: parent.right;        anchors.rightMargin: 8
+                        text: parent.placeholderText
+                        font.pixelSize: 10
+                        color: parent.placeholderTextColor
+                        visible: parent.text.trim().length > 0
+                    }
                 }
 
-                RowLayout {
+                Item { Layout.preferredHeight: 10; Layout.fillWidth: true; }     // Space
 
-                    Label {
+                RowLayout {
+                    spacing: 12
+
+                    Text {
                         text: "Persistent Keepalive"
                     }
 
@@ -870,33 +1343,25 @@ ApplicationWindow {
                     }
                 }
 
-                Item {
-                    Layout.fillHeight: true
-                }
+                Item { Layout.preferredHeight: 10; Layout.fillWidth: true; }     // Space
 
-                RowLayout {
+                Rectangle {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredHeight: profileEditSaveText.height + 25
                     Layout.fillWidth: true
+                    color: root.primaryColor
+                    radius: height / 5
 
-                    Button {
-                        text: " Delete "
-                        onClicked: {
-                            deleteProfileDialog.profileIndex = profileEditorDialog.profileIndex;
-                            deleteProfileDialog.open();
-                        }
+                    Text {
+                        id: profileEditSaveText
+                        anchors.centerIn: parent
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
+                        color: "white"
+                        text: "Save"
                     }
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                    Button {
-                        text: " Cancel "
-                        onClicked: profileEditorDialog.close()
-                    }
-
-                    Button {
-                        text: " Save "
-                        enabled: profileEditorDialog.isValid()
+                    MouseArea {
+                        anchors.fill: parent
                         onClicked: {
                             if (!profileEditorDialog.isValid()) { return; }
 
@@ -917,6 +1382,55 @@ ApplicationWindow {
                         }
                     }
                 }
+
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
+
+                Rectangle {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredHeight: profileEditCancelText.height + 25
+                    Layout.fillWidth: true
+                    color: root.buttonColor
+                    radius: height / 5
+
+                    Text {
+                        id: profileEditCancelText
+                        anchors.centerIn: parent
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
+                        color: root.textColor
+                        text: "Cancel"
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: profileEditorDialog.close()
+                    }
+                }
+
+                Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
+
+                Rectangle {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredHeight: profileEditDeleteText.height + 25
+                    Layout.fillWidth: true
+                    color: root.buttonColor
+                    radius: height / 5
+
+                    Text {
+                        id: profileEditDeleteText
+                        anchors.centerIn: parent
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
+                        color: root.textColor
+                        text: "Delete"
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            deleteProfileDialog.profileIndex = profileEditorDialog.profileIndex;
+                            deleteProfileDialog.open();
+                        }
+                    }
+                }
             }
         }
     }
@@ -925,49 +1439,159 @@ ApplicationWindow {
         id: deleteProfileDialog
         anchors.centerIn: parent
         modal: true
-        width: 225
-        height: 150
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width: Math.min(root.width * 0.7, 700)
+        //height: 150
         property int profileIndex: -1
-        title: "Delete Profile"
 
         background: Rectangle {
-            color: "white"
-            radius: 12
+            color: root.popupColor
+            radius: 15
             border.color: root.borderColor
         }
 
         ColumnLayout {
             id: deleteFormLayout
+            anchors.top: parent.top;            //anchors.topMargin: 15
+            anchors.left: parent.left;          //anchors.leftMargin: 20
+            anchors.right: parent.right;        //anchors.rightMargin: 20
+            spacing: 0
 
-            Text {
-                text: "Really delete this VPN profile?"
-            }
+            Image {
+                Layout.alignment: Qt.AlignRight
+                //height: 20
+                Layout.preferredHeight: 20
+                sourceSize.height: height
+                fillMode: Image.PreserveAspectFit
+                source: "resources/images/i_cross.svg"
 
-            CheckBox {
-                id: deleteConfigCheckBox
-                text: "Delete configuration file too"
-            }
-
-            RowLayout {
-
-                Item {
-                    Layout.fillWidth: true
-                }
-
-                Button {
-                    text: " Cancel "
+                MouseArea {
+                    anchors.fill: parent
                     onClicked: deleteProfileDialog.close()
                 }
+            }
 
-                Button {
-                    text: " Delete "
-                    highlighted: true
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredHeight: 80
+                Layout.preferredWidth: 80
+                color: "#F7E2E1"
+                radius: width
+
+                Text {
+                    anchors.centerIn: parent
+                    color: "#ED1A2B"
+                    font.pixelSize: parent.height / 1.5
+                    font.weight: Font.Black
+                    text: "!"
+                }
+            }
+
+            Item { Layout.preferredHeight: 10; Layout.fillWidth: true; }     // Space
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: parent.width * 0.95
+                text: "Really delete this VPN profile?"
+                color: root.textColor
+                font.pixelSize: 20
+                font.weight: Font.ExtraBold
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+            }
+
+            Item { Layout.preferredHeight: 10; Layout.fillWidth: true; }     // Space
+
+            Item {
+                id: deleteConfigCheckBox
+                Layout.alignment: Qt.AlignLeft
+                Layout.leftMargin: 20
+                Layout.fillWidth: true
+                Layout.preferredHeight: 20
+                property real space: 10
+                property bool checked: false
+
+                Rectangle {
+                    id: deteleCheckboxBox
+                    width: height
+                    height: parent.height
+                    color: "white"
+                    radius: height / 6
+                    border.width: 1
+                    border.color: "#3E649C"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "✔"
+                        font.pixelSize: parent.height * 0.8
+                        color: root.textColor
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        visible: deleteConfigCheckBox.checked
+                    }
+                }
+                Text {
+                    id: deleteCheckboxText
+                    anchors.verticalCenter: deteleCheckboxBox.verticalCenter
+                    anchors.left: deteleCheckboxBox.right;        anchors.leftMargin: deleteConfigCheckBox.space
+                    text: "Delete configuration file too"
+                    font.pixelSize: deteleCheckboxBox.height * 0.8
+                    color: root.textColor
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: parent.checked = !parent.checked
+                }
+            }
+
+            Item { Layout.preferredHeight: 12; Layout.fillWidth: true; }     // Space
+
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredHeight: deleteFormLayoutDeleteText.height + 25
+                Layout.fillWidth: true
+                color: root.primaryColor
+                radius: height / 5
+
+                Text {
+                    id: deleteFormLayoutDeleteText
+                    anchors.centerIn: parent
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    color: "white"
+                    text: "Delete"
+                }
+                MouseArea {
+                    anchors.fill: parent
                     onClicked: {
                         serviceController.deleteProfile(deleteProfileDialog.profileIndex, deleteConfigCheckBox.checked);
                         deleteProfileDialog.close();
                         profileEditorDialog.close();
                     }
+                }
+            }
+
+            Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
+
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredHeight: deleteFormLayoutCancelText.height + 25
+                Layout.fillWidth: true
+                color: root.buttonColor
+                radius: height / 5
+
+                Text {
+                    id: deleteFormLayoutCancelText
+                    anchors.centerIn: parent
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    color: root.textColor
+                    text: "Cancel"
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: deleteProfileDialog.close()
                 }
             }
         }
@@ -991,49 +1615,154 @@ ApplicationWindow {
         id: exitDialog
         anchors.centerIn: parent
         modal: true
-        title: "Exit Application"
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width: Math.min(root.width * 0.8, 700)
+        //height: Math.min(root.height * 0.85, 750)
 
         background: Rectangle {
-            color: "white"
-            radius: 12
+            color: root.popupColor
+            radius: 15
             border.color: root.borderColor
         }
 
         ColumnLayout {
-            spacing: 10
+            id: exitFormLayouut
+            anchors.top: parent.top;            //anchors.topMargin: 15
+            anchors.left: parent.left;          //anchors.leftMargin: 20
+            anchors.right: parent.right;        //anchors.rightMargin: 20
+            spacing: 0
 
-            Text {
-                text: "Disconnect all VPN connections before exiting?"
-            }
+            Image {
+                Layout.alignment: Qt.AlignRight
+                //height: 20
+                Layout.preferredHeight: 20
+                sourceSize.height: height
+                fillMode: Image.PreserveAspectFit
+                source: "resources/images/i_cross.svg"
 
-            CheckBox {
-                id: doNotAskAgainCheck
-                text: "Do not ask again"
-            }
-
-            RowLayout {
-
-                Button {
-                    text: "Cancel"
+                MouseArea {
+                    anchors.fill: parent
                     onClicked: exitDialog.close()
                 }
+            }
 
-                Item {
-                    Layout.fillWidth: true
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredHeight: 80
+                Layout.preferredWidth: 80
+                color: "#F7E2E1"
+                radius: width
+
+                Text {
+                    anchors.centerIn: parent
+                    color: "#ED1A2B"
+                    font.pixelSize: parent.height / 1.5
+                    font.weight: Font.Black
+                    text: "!"
                 }
+            }
 
-                Button {
-                    text: " Exit "
-                    onClicked: {
-                        if (doNotAskAgainCheck.checked) { serviceController.askDisconnectOnExit = false; }
-                        root.reallyClosing = true;
-                        root.close();
+            Item { Layout.preferredHeight: 10; Layout.fillWidth: true; }     // Space
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: parent.width * 0.95
+                text: "Disconnect VPN First?"
+                color: root.textColor
+                font.pixelSize: 20
+                font.weight: Font.ExtraBold
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+            }
+
+            Item { Layout.preferredHeight: 10; Layout.fillWidth: true; }     // Space
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: parent.width * 0.95
+                text: "An active VPN connection is running."
+                color: root.secondaryText
+                font.pixelSize: 16
+                //font.weight: Font.DemiBold
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+            }
+
+            Item { Layout.preferredHeight: 10; Layout.fillWidth: true; }     // Space
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: parent.width * 0.95
+                text: "Disconnecting before exit helps prevent accidental traffic leaks."
+                color: root.secondaryText
+                font.pixelSize: 16
+                //font.weight: Font.DemiBold
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+            }
+
+            Item { Layout.preferredHeight: 12; Layout.fillWidth: true; }     // Space
+
+            Item {
+                id: doNotAskAgainCheck
+                Layout.alignment: Qt.AlignLeft
+                Layout.leftMargin: 20
+                Layout.fillWidth: true
+                Layout.preferredHeight: 20
+                property real space: 10
+                property bool checked: false
+
+                Rectangle {
+                    id: checkboxBox
+                    width: height
+                    height: parent.height
+                    color: "white"
+                    radius: height / 6
+                    border.width: 1
+                    border.color: "#3E649C"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "✔"
+                        font.pixelSize: parent.height * 0.8
+                        color: root.textColor
+                        visible: doNotAskAgainCheck.checked
                     }
                 }
+                Text {
+                    id: checkboxText
+                    anchors.verticalCenter: checkboxBox.verticalCenter
+                    anchors.left: checkboxBox.right;        anchors.leftMargin: doNotAskAgainCheck.space
+                    text: "Don't show again"
+                    font.pixelSize: checkboxBox.height * 0.8
+                    color: root.textColor
+                }
 
-                Button {
-                    text: "Disconnect && Exit"
-                    highlighted: true
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: parent.checked = !parent.checked
+                }
+            }
+
+            Item { Layout.preferredHeight: 12; Layout.fillWidth: true; }     // Space
+
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredHeight: disconnetAndExitText.height + 25
+                Layout.fillWidth: true
+                color: root.primaryColor
+                radius: height / 5
+
+                Text {
+                    id: disconnetAndExitText
+                    anchors.centerIn: parent
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    color: "white"
+                    text: "Disconnect & Exit"
+                }
+                MouseArea {
+                    anchors.fill: parent
                     onClicked: {
                         if (doNotAskAgainCheck.checked) { serviceController.askDisconnectOnExit = false; }
                         serviceController.disconnectAllProfiles();
@@ -1042,6 +1771,58 @@ ApplicationWindow {
                     }
                 }
             }
+
+            Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
+
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredHeight: exitAnywayText.height + 25
+                Layout.fillWidth: true
+                color: root.buttonColor
+                radius: height / 5
+
+                Text {
+                    id: exitAnywayText
+                    anchors.centerIn: parent
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    color: root.textColor
+                    text: "Exit Anyway"
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        if (doNotAskAgainCheck.checked) { serviceController.askDisconnectOnExit = false; }
+                        root.reallyClosing = true;
+                        root.close();
+                    }
+                }
+            }
+
+            Item { Layout.preferredHeight: 6; Layout.fillWidth: true; }     // Space
+
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredHeight: cancelText.height + 25
+                Layout.fillWidth: true
+                color: root.buttonColor
+                radius: height / 5
+
+                Text {
+                    id: cancelText
+                    anchors.centerIn: parent
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    color: root.textColor
+                    text: "Cancel"
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: exitDialog.close()
+                }
+            }
+
+
         }
     }
 }

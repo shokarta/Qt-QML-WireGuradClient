@@ -68,6 +68,7 @@ qt_add_qml_module(${TARGET_NAME}
 		resources/images/i_arrowUp.svg
 		resources/images/i_arrowDown.svg
 		resources/images/i_clock.svg
+		resources/images/i_cross.svg
 		resources/images/i_shield.svg
 		resources/images/i_settings.gif
 )
