@@ -4,11 +4,12 @@
 #include <QWindow>
 #include <QStyle>
 #include <QApplication>
+#include <QDirIterator>
 
 
 TrayManager::TrayManager(QObject *parent) : QObject(parent)
 {
-    m_tray.setIcon(QIcon(QString(APP_URI) + "/resources/app.ico"));
+    m_tray.setIcon(QIcon(":/" + QString(APP_URI) + "/resources/app.ico"));
     m_tray.setToolTip("WireGuard Client");
 
     QAction *restoreAction = m_menu.addAction(QApplication::style()->standardIcon(QStyle::SP_TitleBarNormalButton), "Restore");                 restoreAction->setEnabled(true);

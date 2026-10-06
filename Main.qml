@@ -692,7 +692,7 @@ ApplicationWindow {
 
                     Rectangle {
                         Layout.fillHeight: true
-                        Layout.preferredWidth: browseButtonText.width + 25
+                        Layout.preferredWidth: browseButtonText.width + 30
                         color: root.primaryColor
                         radius: height / 5
 
@@ -702,7 +702,7 @@ ApplicationWindow {
                             font.pixelSize: 16
                             font.weight: Font.DemiBold
                             color: "white"
-                            text: "Browse..."
+                            text: "Browse"
                         }
                         MouseArea {
                             anchors.fill: parent
