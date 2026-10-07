@@ -1,0 +1,1 @@
+c:\Qt\6.12.0\msvc2022_64\bin\windeployqt.exe --release --qmldir "c:\Qt\Projects\Sources\wireGuardClient" --verbose 2 "C:\Temp\wireGuardClient\wireGuardClient.exe"
