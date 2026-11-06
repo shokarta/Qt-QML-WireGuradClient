@@ -130,6 +130,9 @@ public:
 	// WIREGUARD CONFIGURATION
 	Q_INVOKABLE bool setWireGuardFolder(const QString &folder);
 
+    // READ CONFIG
+    Q_INVOKABLE QVariantMap loadConfigFile(const QString &path);
+
 
 signals:
 

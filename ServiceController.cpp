@@ -202,6 +202,11 @@ bool ServiceController::addProfile(const QVariantMap &config)
 		return false;
 	}
 
+	if (install.exitStatus() != QProcess::NormalExit || install.exitCode() != 0) {
+qDebug() << install.readAllStandardError();
+		return false;
+	}
+
 	discoverProfiles();
 
 	return true;
@@ -335,10 +340,10 @@ void ServiceController::startProfile(int row)
 		for (int i = 0; i < profiles.size(); i++) {
 			if (i == row) { continue; }
 
-			profiles[row].pendingStart = false;
-			profiles[row].pendingStop = true;
+			profiles[i].pendingStart = false;
+			profiles[i].pendingStop = true;
 
-			m_profilesModel.refreshRow(row);
+			m_profilesModel.refreshRow(i);
 
 			QProcess::startDetached(
 				"sc",
@@ -421,6 +426,63 @@ bool ServiceController::setWireGuardFolder(const QString &folder)
 	emit wireGuardInstalledChanged();
 
 	return true;
+}
+
+
+// READ CONFIG
+QVariantMap ServiceController::loadConfigFile(const QString &path)
+{
+	QVariantMap result;
+
+	QFile file(path);
+
+	if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		return result;
+	}
+
+	result["ProfileName"] = QFileInfo(path).completeBaseName();
+
+	QTextStream stream(&file);
+
+	QString currentSection;
+
+	while (!stream.atEnd()) {
+
+		QString line = stream.readLine().trimmed();
+
+		if (line.isEmpty()) { continue; }
+
+		if (line.startsWith('#') || line.startsWith(';')) { continue; }
+
+		// [Interface]
+		// [Peer]
+		if (line.startsWith('[') && line.endsWith(']')) {
+			currentSection = line.mid(1, line.length() - 2).trimmed();
+
+			if (!result.contains(currentSection)) { result[currentSection] = QVariantMap{}; }
+
+			continue;
+		}
+
+		int pos = line.indexOf('=');
+
+		if (pos < 0 || currentSection.isEmpty()) { continue; }
+
+		QString key = line.left(pos).trimmed();
+		QString value = line.mid(pos + 1).trimmed();
+
+		QVariantMap section = result.value(currentSection).toMap();
+
+		// automaticky uložit čísla jako int
+		bool ok = false;
+		int intValue = value.toInt(&ok);
+
+		section[key] = ok ? QVariant(intValue) : QVariant(value);
+
+		result[currentSection] = section;
+	}
+
+	return result;
 }
 
 

@@ -593,9 +593,9 @@ ApplicationWindow {
 
             ColumnLayout {
                 id: addFormLayouut
-                anchors.top: parent.top;            //anchors.topMargin: 15
-                anchors.left: parent.left;          anchors.leftMargin: 20
-                anchors.right: parent.right;        anchors.rightMargin: 20
+                anchors.top: parent.top;            anchors.topMargin: 10
+                anchors.left: parent.left;          anchors.leftMargin: 10
+                anchors.right: parent.right;        anchors.rightMargin: 10
                 spacing: 0
 
                 Image {
@@ -973,8 +973,14 @@ ApplicationWindow {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
-                            if (!addProfileDialog.isValid()) { return; }
+                            console.log("VALID:", addProfileDialog.isValid());
 
+                            if (!addProfileDialog.isValid()) {
+                                console.log("FORM INVALID");
+                                return;
+                            }
+
+                            console.log("CALLING ADDPROFILE");
                             if (serviceController.addProfile({
                                 "ProfileName": newProfileNameField.text,
                                 "ConfigPath": newConfigPathField.text,
@@ -988,6 +994,7 @@ ApplicationWindow {
                                 "AllowedIPs": newAllowedIpsField.text,
                                 "PersistentKeepalive": newKeepaliveField.value
                             })) { addProfileDialog.close(); }
+                            else { console.log("ADDPROFILE FAILED"); }
                         }
                     }
                 }
@@ -1601,12 +1608,31 @@ ApplicationWindow {
     FileDialog {
         id: addProfileFileDialog
         title: "Create WireGuard configuration"
-        fileMode: FileDialog.SaveFile
+        fileMode: FileDialog.OpenFile
         nameFilters: [ "WireGuard (*.conf)" ]
         onAccepted: {
             let path = selectedFile.toString().replace("file:///", "").replace(/\//g, "\\");
-            if (!path.toLowerCase().endsWith(".conf")) { path += ".conf"; }
+
             newConfigPathField.text = path;
+            let cfg = serviceController.loadConfigFile(path);
+                let iface = cfg["Interface"] || {};
+                let peer  = cfg["Peer"] || {};
+
+            newProfileNameField.text = cfg["ProfileName"] || "";
+
+            // Interface
+            newPrivateKeyField.text = iface["PrivateKey"] || "";
+            newAddressField.text = iface["Address"] || "";
+            newDnsField.text = iface["DNS"] || "";
+            newListenPortField.text = iface["ListenPort"] || "";
+
+            // Peer
+            newPublicKeyField.text = peer["PublicKey"] || "";
+            newPresharedKeyField.text = peer["PresharedKey"] || "";
+            newEndpointField.text = peer["Endpoint"] || "";
+            newAllowedIpsField.text = peer["AllowedIPs"] || "";
+
+            newKeepaliveField.value = Number(peer["PersistentKeepalive"] || 25);
         }
     }
 
@@ -1821,8 +1847,6 @@ ApplicationWindow {
                     onClicked: exitDialog.close()
                 }
             }
-
-
         }
     }
 }
